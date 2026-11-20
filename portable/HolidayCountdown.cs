@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal enum HolidayTheme { LunarNewYear, NewYear, HungKings, Reunification, LabourDay, NationalDay, MidAutumn, Christmas }
 
@@ -22,8 +22,8 @@ namespace NhipNgay
     internal static class HolidayCountdown
     {
         internal static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
-        private static readonly Lazy<DateTimeOffset[]> HungKingsDays = new Lazy<DateTimeOffset[]>(() => Calendar.Load("NhipNgay.HungKings"));
-        private static readonly Lazy<DateTimeOffset[]> MidAutumnDays = new Lazy<DateTimeOffset[]>(() => Calendar.Load("NhipNgay.MidAutumn"));
+        private static readonly Lazy<DateTimeOffset[]> HungKingsDays = new Lazy<DateTimeOffset[]>(() => Calendar.Load("NghiLe.HungKings"));
+        private static readonly Lazy<DateTimeOffset[]> MidAutumnDays = new Lazy<DateTimeOffset[]>(() => Calendar.Load("NghiLe.MidAutumn"));
 
         internal static HolidayOccurrence? Find(Settings settings, DateTimeOffset now)
         {

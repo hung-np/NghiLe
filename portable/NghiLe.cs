@@ -18,12 +18,12 @@ using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
 
-[assembly: AssemblyTitle(NhipNgay.Widget.ProductName)]
-[assembly: AssemblyProduct(NhipNgay.Widget.ProductName)]
+[assembly: AssemblyTitle(NghiLe.Widget.ProductName)]
+[assembly: AssemblyProduct(NghiLe.Widget.ProductName)]
 [assembly: AssemblyVersion("0.1.10.0")]
 [assembly: AssemblyFileVersion("0.1.10.0")]
 
-namespace NhipNgay
+namespace NghiLe
 {
     public sealed class Settings
     {
@@ -85,7 +85,7 @@ namespace NhipNgay
 
     internal static class Calendar
     {
-        internal static readonly DateTimeOffset[] Holidays = Load("NhipNgay.Calendar");
+        internal static readonly DateTimeOffset[] Holidays = Load("NghiLe.Calendar");
         private static readonly string[] Stems = { "Giáp", "Ất", "Bính", "Đinh", "Mậu", "Kỷ", "Canh", "Tân", "Nhâm", "Quý" };
         private static readonly string[] Branches = { "Tý", "Sửu", "Dần", "Mão", "Thìn", "Tỵ", "Ngọ", "Mùi", "Thân", "Dậu", "Tuất", "Hợi" };
 
@@ -159,7 +159,7 @@ namespace NhipNgay
 
     internal sealed class Widget : Window
     {
-        internal const string ProductName = "Nhịp Ngày";
+        internal const string ProductName = "Nghỉ Lễ";
         private static readonly DoubleAnimation numberFade = CreateNumberFade();
         private static readonly string[] clockNumbers = Enumerable.Range(0, 60)
             .Select(value => value.ToString("00", CultureInfo.InvariantCulture)).ToArray();
@@ -1141,7 +1141,7 @@ namespace NhipNgay
 
         private static int SmokeTest()
         {
-            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NhipNgay-ui-test-" + Guid.NewGuid().ToString("N") + ".json");
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NghiLe-ui-test-" + Guid.NewGuid().ToString("N") + ".json");
             try
             {
                 Widget.ConfigureRendering();
@@ -1217,7 +1217,7 @@ namespace NhipNgay
                 HolidayCountdown.Find(s, september.AddDays(3)).Value.Date != september ||
                 HolidayCountdown.Find(s, september.AddDays(4)).Value.Date != new DateTimeOffset(2027, 9, 15, 0, 0, 0, offset) ||
                 HolidayCountdown.Find(s, new DateTimeOffset(2027, 12, 25, 0, 0, 0, offset)).Value.Theme != HolidayTheme.Christmas) return 71;
-            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NhipNgay-test-" + Guid.NewGuid().ToString("N") + ".json");
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NghiLe-test-" + Guid.NewGuid().ToString("N") + ".json");
             var legacyPath = path + ".legacy";
             try
             {

@@ -1,6 +1,6 @@
 {
   "identifier": "widget",
-  "description": "Quyền của cửa sổ Nhịp Ngày",
+  "description": "Quyền của cửa sổ Nghỉ Lễ",
   "windows": ["main"],
   "permissions": [
     "core:default",

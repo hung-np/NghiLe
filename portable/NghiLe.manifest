@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
   <assemblyIdentity type="win32" name="vn.nocturne.tet" version="1.0.0.0" processorArchitecture="*" />
-  <description>Nhịp Ngày</description>
+  <description>Nghỉ Lễ</description>
   <asmv3:trustInfo>
     <asmv3:security>
       <asmv3:requestedPrivileges>

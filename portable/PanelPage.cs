@@ -7,13 +7,13 @@ using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal class PanelPage : Grid
     {
         internal static readonly Lazy<ResourceDictionary> Theme = new Lazy<ResourceDictionary>(() =>
         {
-            using (var stream = typeof(PanelPage).Assembly.GetManifestResourceStream("NhipNgay.PanelTheme"))
+            using (var stream = typeof(PanelPage).Assembly.GetManifestResourceStream("NghiLe.PanelTheme"))
                 return (ResourceDictionary)XamlReader.Load(stream);
         });
 

@@ -2,7 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Media;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal sealed partial class HolidayScene
     {

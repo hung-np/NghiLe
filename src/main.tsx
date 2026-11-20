@@ -145,7 +145,7 @@ function App() {
         <>
           <Weather motion={motion} />
           <div className="face" role="timer" aria-live="off" aria-label="Đếm ngược đến Tết theo giờ Việt Nam">
-            <p className="year">{target ? `${target.name} · ${target.year}` : 'Nhịp Ngày'}</p>
+            <p className="year">{target ? `${target.name} · ${target.year}` : 'Nghỉ Lễ'}</p>
             <p className={`days ${left && left.days >= 1000 ? 'wide-number' : ''}`}><span className="numeral" key={left?.days}>{left?.days ?? '–'}</span></p>
             <span className="unit day-unit">{dayLabel}</span>
             <span className="face-divider" aria-hidden="true" />

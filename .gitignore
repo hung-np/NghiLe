@@ -4,6 +4,9 @@ src-tauri/target/
 src-tauri/gen/
 HenTet.exe
 HenTet-*.exe
+/NghiLe.exe
+/NghiLe-*.exe
+/NghiLe-*-test-*/
 /NhipNgay.exe
 /NhipNgay-*.exe
 /NhipNgay-*-test-*/

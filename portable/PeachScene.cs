@@ -10,7 +10,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using Path = System.Windows.Shapes.Path;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal sealed class PeachScene : Grid
     {
@@ -172,7 +172,7 @@ namespace NhipNgay
 
         private static BranchArtwork ReadArtwork()
         {
-            using (var reader = new StreamReader(typeof(PeachScene).Assembly.GetManifestResourceStream("NhipNgay.Peach")))
+            using (var reader = new StreamReader(typeof(PeachScene).Assembly.GetManifestResourceStream("NghiLe.Peach")))
                 return new JavaScriptSerializer().Deserialize<BranchArtwork>(reader.ReadToEnd());
         }
 

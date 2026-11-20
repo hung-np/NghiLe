@@ -106,10 +106,10 @@ fn main() {
         .setup(|app| {
             let show = MenuItem::with_id(app, "show", "Mở widget", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Ẩn widget", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Thoát Nhịp Ngày", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Thoát Nghỉ Lễ", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &hide, &quit])?;
             let tray = TrayIconBuilder::new().menu(&menu).show_menu_on_left_click(false)
-                .tooltip("Nhịp Ngày · Đếm ngược Tết");
+                .tooltip("Nghỉ Lễ · Đếm ngược Tết");
             let tray = match app.default_window_icon() {
                 Some(icon) => tray.icon(icon.clone()),
                 None => tray,
@@ -157,5 +157,5 @@ fn main() {
             _ => {}
         })
         .run(tauri::generate_context!())
-        .expect("Không thể khởi động Nhịp Ngày");
+        .expect("Không thể khởi động Nghỉ Lễ");
 }

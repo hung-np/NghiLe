@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal sealed partial class HolidayScene : FrameworkElement
     {

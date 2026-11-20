@@ -5,13 +5,13 @@ using System.Linq;
 using System.Text;
 using System.Windows.Threading;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal static class MusicChecks
     {
         internal static int Run()
         {
-            var folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NhipNgay-music-test-" + Guid.NewGuid().ToString("N"));
+            var folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NghiLe-music-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(folder);
             var first = Path.Combine(folder, "01.wav");
             var second = Path.Combine(folder, "02.WAV");

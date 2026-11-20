@@ -6,7 +6,7 @@ using System.Runtime.InteropServices.ComTypes;
 using System.Security;
 using System.Text;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal sealed class StartupShortcut
     {
@@ -40,7 +40,9 @@ namespace NhipNgay
         private const string ShortcutName = "Hẹn Tết.lnk";
         private const string LegacyDescription = "Hẹn Tết · Đếm ngược Tết";
         private const string LegacyExecutableName = "HenTet.exe";
-        private const string ExecutableName = "NhipNgay.exe";
+        private const string PreviousDescription = "Nhịp Ngày · Đếm ngược ngày lễ";
+        private const string PreviousExecutableName = "NhipNgay.exe";
+        private const string ExecutableName = "NghiLe.exe";
         private const string Description = Widget.ProductName + " · Đếm ngược ngày lễ";
         private readonly string path;
         private readonly string executable;
@@ -69,11 +71,16 @@ namespace NhipNgay
             if (path == null || !File.Exists(path) ||
                 !string.Equals(Path.GetFileName(executable), ExecutableName, StringComparison.OrdinalIgnoreCase)) return;
 
-            var oldExecutable = Path.Combine(Path.GetDirectoryName(executable), LegacyExecutableName);
+            var folder = Path.GetDirectoryName(executable);
             UseShortcut<bool>((link, exists) =>
             {
-                if (!exists || ReadDescription(link) != LegacyDescription ||
-                    !TargetsExecutable(link, oldExecutable)) return false;
+                if (!exists) return false;
+                var description = ReadDescription(link);
+                var matchesLegacy = description == LegacyDescription &&
+                    TargetsExecutable(link, Path.Combine(folder, LegacyExecutableName));
+                var matchesPrevious = description == PreviousDescription &&
+                    TargetsExecutable(link, Path.Combine(folder, PreviousExecutableName));
+                if (!matchesLegacy && !matchesPrevious) return false;
 
                 SaveShortcut(link);
                 return true;
@@ -98,7 +105,8 @@ namespace NhipNgay
                 if (exists && !matches)
                 {
                     var description = ReadDescription(link);
-                    if (description != Description && description != LegacyDescription) return false;
+                    if (description != Description && description != LegacyDescription &&
+                        description != PreviousDescription) return false;
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 SaveShortcut(link);
@@ -153,13 +161,14 @@ namespace NhipNgay
 
         internal static int Check()
         {
-            var folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NhipNgay-startup-test-" + Guid.NewGuid().ToString("N"));
+            var folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NghiLe-startup-test-" + Guid.NewGuid().ToString("N"));
             var shortcut = new StartupShortcut(folder, Assembly.GetExecutingAssembly().Location);
             var movedFolder = Path.Combine(folder, "Moved App");
             var movedExecutable = Path.Combine(movedFolder, ExecutableName);
             var moved = new StartupShortcut(folder, movedExecutable);
             var legacyExecutable = Path.Combine(movedFolder, LegacyExecutableName);
             var legacy = new StartupShortcut(folder, legacyExecutable);
+            var previousExecutable = Path.Combine(movedFolder, PreviousExecutableName);
             try
             {
                 if (shortcut.ReadEnabled() != false || Directory.Exists(folder)) return 60;
@@ -200,6 +209,19 @@ namespace NhipNgay
                 moved.UpgradeLegacyTarget();
                 if (moved.ReadEnabled() != true || legacy.ReadEnabled() != false ||
                     !moved.UseShortcut<bool>((link, exists) => exists && ReadDescription(link) == Description, false)) return 70;
+                File.Copy(movedExecutable, previousExecutable);
+                if (!moved.UseShortcut<bool>((link, exists) =>
+                {
+                    if (!exists) return false;
+                    link.SetPath(previousExecutable);
+                    link.SetDescription(PreviousDescription);
+                    ((IPersistFile)link).Save(moved.path, true);
+                    return true;
+                }, false)) return 72;
+                File.Delete(previousExecutable);
+                moved.UpgradeLegacyTarget();
+                if (moved.ReadEnabled() != true ||
+                    !moved.UseShortcut<bool>((link, exists) => exists && ReadDescription(link) == Description, false)) return 73;
                 if (!moved.SetEnabled(false) || moved.ReadEnabled() != false) return 71;
                 return 0;
             }
@@ -212,6 +234,7 @@ namespace NhipNgay
                     {
                         File.Delete(movedExecutable);
                         File.Delete(legacyExecutable);
+                        File.Delete(previousExecutable);
                         Directory.Delete(movedFolder);
                     }
                     Directory.Delete(folder);

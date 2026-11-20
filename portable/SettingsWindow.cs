@@ -10,7 +10,7 @@ using System.Windows.Media;
 using System.Windows.Shell;
 using Forms = System.Windows.Forms;
 
-namespace NhipNgay
+namespace NghiLe
 {
     internal sealed class HolidaySetting
     {
