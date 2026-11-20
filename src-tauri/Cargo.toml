@@ -1,0 +1,13 @@
+[package]
+name = "hen-tet"
+version = "0.1.6"
+description = "Widget đếm ngược Tết Việt Nam"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = "2"
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
