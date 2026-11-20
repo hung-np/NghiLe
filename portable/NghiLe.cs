@@ -20,8 +20,8 @@ using Drawing = System.Drawing;
 
 [assembly: AssemblyTitle(NghiLe.Widget.ProductName)]
 [assembly: AssemblyProduct(NghiLe.Widget.ProductName)]
-[assembly: AssemblyVersion("0.1.10.0")]
-[assembly: AssemblyFileVersion("0.1.10.0")]
+[assembly: AssemblyVersion("0.1.11.0")]
+[assembly: AssemblyFileVersion("0.1.11.0")]
 
 namespace NghiLe
 {
@@ -185,7 +185,7 @@ namespace NghiLe
         private readonly StackPanel dayCount = new StackPanel();
         private readonly Grid divider = new Grid();
         private readonly StackPanel controls = new StackPanel { Orientation = Orientation.Horizontal };
-        private PanelPage panel;
+        private ScrollViewer optionsPage;
         private MusicView music;
         private Button resizeGrip;
         private Point resizeStart;
@@ -420,6 +420,7 @@ namespace NghiLe
                 case HolidayTheme.Reunification: return new HolidayPalette("#53634C", "#2A4135", "#192C27", "#FFF1CE", "#EAC583", "#659B8D57");
                 case HolidayTheme.LabourDay: return new HolidayPalette("#344F67", "#24384E", "#192839", "#FFEDDA", "#EE9F72", "#75755A58");
                 case HolidayTheme.NationalDay: return new HolidayPalette("#9B2733", "#671C28", "#361522", "#FFF1CB", "#F7CD78", "#739B413D");
+                case HolidayTheme.VietnamCultureDay: return new HolidayPalette("#245B58", "#183F40", "#102729", "#FFF2D2", "#E5BB77", "#6894864E");
                 case HolidayTheme.MidAutumn: return new HolidayPalette("#45385F", "#2D244B", "#201B39", "#FFF1CB", "#F6BD8B", "#75684D8D");
                 case HolidayTheme.Christmas: return new HolidayPalette("#2E574A", "#1B3934", "#112924", "#FFF5DE", "#EBC58B", "#68548467");
                 default: return new HolidayPalette("#511B2C", "#361725", "#200F19", "#FFE4B9", "#EDC79E", "#50883F50");
@@ -477,6 +478,7 @@ namespace NghiLe
             }
             if (weather != null) weather.Visibility = showPeach ? Visibility.Visible : Visibility.Collapsed;
             holidayScene.ShowTheme(theme, config.ApricotNewYear);
+            UpdateTitleTypography();
             UpdateMotion();
         }
 
@@ -579,15 +581,21 @@ namespace NghiLe
             bool horizontal = config.Horizontal;
             face.VerticalAlignment = horizontal ? VerticalAlignment.Stretch : VerticalAlignment.Top;
             face.Margin = horizontal ? new Thickness(0, 0, 18, 0) : new Thickness(12, compact ? 49 : 51, 12, 0);
-            year.FontSize = horizontal ? 12 : compact ? 17 : 14;
+            UpdateTitleTypography();
             greeting.Margin = horizontal ? new Thickness(128, 0, 19, 0) : new Thickness(16, 42, 16, 0);
-            greetingText.FontSize = horizontal ? 20 : 26;
             days.Height = horizontal ? 53 : compact ? 97 : 77;
             dayUnit.FontSize = horizontal ? 9 : compact ? 11 : 9.5;
             clock.Margin = horizontal ? new Thickness(0, 1, 0, 0) : new Thickness(0, 2, 0, 0);
             dateStatus.Visibility = horizontal || compact ? Visibility.Collapsed : Visibility.Visible;
             if (unavailableStatus != null) year.Text = horizontal || compact ? unavailableStatus : ProductName;
             UpdateDayPresentation();
+        }
+
+        private void UpdateTitleTypography()
+        {
+            bool cultureDay = displayedTheme == HolidayTheme.VietnamCultureDay;
+            year.FontSize = config.Horizontal ? (cultureDay ? 11 : 12) : compact ? (cultureDay ? 15 : 17) : 14;
+            greetingText.FontSize = config.Horizontal ? (cultureDay ? 17.5 : 20) : 26;
         }
 
         private void UpdateDayPresentation()
@@ -636,8 +644,8 @@ namespace NghiLe
             var theme = occurrence.HasValue ? (HolidayTheme?)occurrence.Value.Theme : null;
             string unavailable = target.HasValue ? null : config.SelectedHolidays.Length == 0 ? "Chưa chọn ngày nghỉ" : "Hết dữ liệu lịch";
             var seconds = target.HasValue ? Calendar.Seconds(target.Value, now) : -1;
-            bool showGreeting = seconds == 0 && local.Date <= occurrence.Value.LastDay.Date &&
-                (theme == HolidayTheme.LunarNewYear || theme == HolidayTheme.MidAutumn || theme == HolidayTheme.Christmas);
+            string greetingTitle = seconds == 0 && local.Date <= occurrence.Value.LastDay.Date ? GreetingFor(theme) : null;
+            bool showGreeting = greetingTitle != null;
             bool themeChanged = theme != displayedTheme || unavailable != unavailableStatus;
             bool targetChanged = target != displayedTarget || themeChanged;
             if (!targetChanged && seconds == displayedSeconds && celebrating == showGreeting) return;
@@ -649,7 +657,7 @@ namespace NghiLe
             displayedTheme = theme;
             unavailableStatus = unavailable;
             if (themeChanged) ApplyHolidayTheme(theme);
-            if (targetChanged || celebrating != showGreeting) UpdateGreeting(showGreeting, theme, target, local);
+            if (targetChanged || celebrating != showGreeting) UpdateGreeting(greetingTitle, theme, target, local);
             if (!target.HasValue)
             {
                 year.Text = config.Horizontal || compact ? unavailable : ProductName;
@@ -677,19 +685,30 @@ namespace NghiLe
             if (daysChanged || dateChanged) UpdateDayPresentation();
         }
 
-        private void UpdateGreeting(bool show, HolidayTheme? theme, DateTimeOffset? target, DateTimeOffset now)
+        private static string GreetingFor(HolidayTheme? theme)
         {
-            celebrating = show;
-            if (show)
+            switch (theme)
             {
-                greetingText.Text = theme == HolidayTheme.LunarNewYear ? "Chúc mừng năm mới" :
-                    theme == HolidayTheme.MidAutumn ? "Vui Tết Trung thu" : "Giáng sinh an lành";
+                case HolidayTheme.LunarNewYear: return "Chúc mừng năm mới";
+                case HolidayTheme.MidAutumn: return "Vui Tết Trung thu";
+                case HolidayTheme.Christmas: return "Giáng sinh an lành";
+                case HolidayTheme.VietnamCultureDay: return HolidaySetting.VietnamCultureDayName;
+                default: return null;
+            }
+        }
+
+        private void UpdateGreeting(string title, HolidayTheme? theme, DateTimeOffset? target, DateTimeOffset now)
+        {
+            celebrating = title != null;
+            if (celebrating)
+            {
+                greetingText.Text = title;
                 greetingDetail.Text = theme == HolidayTheme.LunarNewYear ? Calendar.Name(target.Value.Year) + " · " + target.Value.Year :
                     now.ToString("dd/MM");
             }
-            greeting.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            face.Visibility = show ? Visibility.Hidden : Visibility.Visible;
-            holidayScene.SetCelebration(show);
+            greeting.Visibility = celebrating ? Visibility.Visible : Visibility.Collapsed;
+            face.Visibility = celebrating ? Visibility.Hidden : Visibility.Visible;
+            holidayScene.SetCelebration(celebrating);
             UpdateMotion();
         }
 
@@ -740,17 +759,12 @@ namespace NghiLe
             surface.Children.Add(controls);
         }
 
-        private void BuildSettings()
+        private FrameworkElement BuildSettings()
         {
-            panel = new PanelPage("Tùy chọn", "Về ngày lễ và sự kiện", OpenSettings);
-            panel.MaxWidth = 480;
-            panel.Margin = new Thickness(24);
-            var muted = (Brush)panel.FindResource("PanelMuted");
+            var muted = (Brush)settingsWindow.FindResource("PanelMuted");
             var fields = new StackPanel();
-            AddStartupSetting(fields);
-            fields.Children.Add(new TextBlock { Text = "ĐẾM NGƯỢC", Foreground = muted, FontSize = 9,
-                FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 1, 0, 4) });
-            var select = new ComboBox { Margin = new Thickness(0, 0, 0, 4) };
+            fields.Children.Add(PanelPage.SectionHeading("Đếm ngược", settingsWindow, 0));
+            var select = new ComboBox { Width = 184, MinHeight = 30, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Right };
             System.Windows.Automation.AutomationProperties.SetName(select, "Năm Tết");
             select.SetBinding(ToolTipProperty, new Binding("SelectionBoxItem") { Source = select });
             select.Items.Add(new ComboBoxItem { Content = "Tết kế tiếp" });
@@ -766,10 +780,9 @@ namespace NghiLe
                 UpdateClock();
                 Persist();
             };
-            fields.Children.Add(select);
-            fields.Children.Add(new TextBlock { Text = "HIỂN THỊ", Foreground = muted, FontSize = 9, FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 2, 0, 2) });
-            var layout = new ComboBox { Width = 60, MinHeight = 24, Margin = new Thickness(4, 0, 0, 0) };
+            AddOptionRow(fields, select, "Sự kiện");
+            fields.Children.Add(PanelPage.SectionHeading("Hiển thị", settingsWindow, 20));
+            var layout = new ComboBox { Width = 112, MinHeight = 30, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Right };
             System.Windows.Automation.AutomationProperties.SetName(layout, "Bố cục");
             layout.Items.Add(new ComboBoxItem { Content = "Dọc" });
             layout.Items.Add(new ComboBoxItem { Content = "Ngang" });
@@ -780,25 +793,19 @@ namespace NghiLe
                 ApplyOrientation();
                 Persist();
             };
-            var layoutRow = new DockPanel();
-            DockPanel.SetDock(layout, Dock.Right);
-            layoutRow.Children.Add(layout);
-            layoutRow.Children.Add(new TextBlock { Text = "Bố cục", FontSize = 11, VerticalAlignment = VerticalAlignment.Center,
-                TextWrapping = TextWrapping.Wrap });
-            fields.Children.Add(layoutRow);
-            fields.Children.Add(MakeSwitch("Luôn nổi", "Luôn nổi trên màn hình", config.AlwaysOnTop,
+            AddOptionRow(fields, layout, "Bố cục");
+            AddOptionRow(fields, MakeSwitch("Luôn nổi", "Luôn nổi trên màn hình", config.AlwaysOnTop,
                 value => { config.AlwaysOnTop = value; Topmost = value; }));
-            fields.Children.Add(MakeSwitch("Chuyển động", "Hiệu ứng chuyển động", config.Motion,
+            AddOptionRow(fields, MakeSwitch("Chuyển động", "Hiệu ứng chuyển động", config.Motion,
                 value => { config.Motion = value; UpdateMotion(); }));
 
-            var glassHeading = new DockPanel { Margin = new Thickness(0, 2, 0, 0) };
-            var valueLabel = new TextBlock { Text = config.Glass + "%", FontSize = 10, Foreground = muted };
+            var glassControl = new DockPanel();
+            var valueLabel = new TextBlock { Text = config.Glass + "%", FontSize = 13, Foreground = muted,
+                Width = 48, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(valueLabel, Dock.Right);
-            glassHeading.Children.Add(valueLabel);
-            glassHeading.Children.Add(new TextBlock { Text = "Độ đậm kính", FontSize = 11 });
-            fields.Children.Add(glassHeading);
+            glassControl.Children.Add(valueLabel);
             var slider = new Slider { Minimum = 42, Maximum = 100, Value = config.Glass, TickFrequency = 1,
-                IsSnapToTickEnabled = true, IsMoveToPointEnabled = true };
+                IsSnapToTickEnabled = true, IsMoveToPointEnabled = true, VerticalAlignment = VerticalAlignment.Center };
             System.Windows.Automation.AutomationProperties.SetName(slider, "Độ đậm kính");
             slider.ValueChanged += (s, e) =>
             {
@@ -807,13 +814,33 @@ namespace NghiLe
                 ApplyGlass();
                 ScheduleSave();
             };
-            fields.Children.Add(slider);
+            glassControl.Children.Add(slider);
+            AddOptionRow(fields, glassControl, "Độ đậm kính");
 
-            var scroller = new ScrollViewer { Content = fields, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, PanningMode = PanningMode.VerticalOnly, Focusable = false };
-            var musicButton = new Button { Content = "Nhạc  ›", Style = (Style)panel.FindResource("PanelPrimary") };
-            musicButton.Click += (s, e) => ShowMusic();
-            panel.SetContent(scroller, musicButton);
+            fields.Children.Add(PanelPage.SectionHeading("Khởi động", settingsWindow, 20));
+            AddStartupSetting(fields);
+            optionsPage = PanelPage.Scroll(fields);
+            return optionsPage;
+        }
+
+        private static void AddOptionRow(StackPanel fields, FrameworkElement control, string label = null)
+        {
+            FrameworkElement content = control;
+            if (label != null)
+            {
+                var row = new DockPanel { Margin = new Thickness(12, 0, 12, 0), MinHeight = 44 };
+                var caption = new TextBlock { Text = label, FontSize = 14, MinWidth = 132,
+                    VerticalAlignment = VerticalAlignment.Center };
+                caption.SetResourceReference(TextBlock.ForegroundProperty, "PanelInk");
+                row.Children.Add(caption);
+                control.VerticalAlignment = VerticalAlignment.Center;
+                row.Children.Add(control);
+                content = row;
+            }
+
+            var divider = new Border { Child = content, BorderThickness = new Thickness(0, 0, 0, 1) };
+            divider.SetResourceReference(Border.BorderBrushProperty, "PanelDivider");
+            fields.Children.Add(divider);
         }
 
         private void BuildResizeGrip()
@@ -881,7 +908,7 @@ namespace NghiLe
 
         private static CheckBox CreateSwitch(string name, string tooltip, bool value)
         {
-            var input = new CheckBox { Content = new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap }, MinHeight = 23,
+            var input = new CheckBox { Content = new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap },
                 ToolTip = tooltip, IsChecked = value };
             System.Windows.Automation.AutomationProperties.SetName(input, tooltip);
             return input;
@@ -891,8 +918,8 @@ namespace NghiLe
         {
             var startup = StartupShortcut.ForCurrentUser();
             var input = CreateSwitch("Mở cùng Windows", "Tự mở " + ProductName + " khi đăng nhập Windows", false);
-            fields.Children.Add(input);
-            var message = new TextBlock { FontSize = 10, Foreground = ColorBrush("#FFD2D6"),
+            AddOptionRow(fields, input);
+            var message = new TextBlock { FontSize = 13, Foreground = ColorBrush("#FFD2D6"), Margin = new Thickness(12, 6, 12, 0),
                 TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
             fields.Children.Add(message);
 
@@ -920,14 +947,8 @@ namespace NghiLe
         {
             if (settingsWindow == null)
                 settingsWindow = new SettingsWindow(this, config, () => { UpdateClock(); Persist(); },
-                    ScheduleSave, ShowOptions, SetSpringStyle);
+                    ScheduleSave, BuildSettings, CreateMusic, SetSpringStyle);
             settingsWindow.OpenHolidays();
-        }
-
-        private void ShowOptions()
-        {
-            if (panel == null) BuildSettings();
-            settingsWindow.OpenPage(panel);
         }
 
         private void SetSpringStyle(bool apricot)
@@ -938,16 +959,10 @@ namespace NghiLe
             Persist();
         }
 
-        private void ShowMusic()
+        private FrameworkElement CreateMusic()
         {
-            if (music == null)
-            {
-                music = new MusicView(new Playlist(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nhac")),
-                    ShowOptions);
-                music.MaxWidth = 520;
-                music.Margin = new Thickness(24);
-            }
-            settingsWindow.OpenPage(music);
+            music = new MusicView(new Playlist(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nhac")));
+            return music;
         }
 
         private void UpdateControls()
@@ -972,7 +987,7 @@ namespace NghiLe
             if (!IsVisible || !AllowsTransparency || ShowInTaskbar || !tray.Visible ||
                 !tray.Text.StartsWith(ProductName, StringComparison.Ordinal) ||
                 !tray.ContextMenuStrip.Items.Cast<Forms.ToolStripItem>().Any(item => item.Text == "Thoát " + ProductName)) return 21;
-            if (settingsWindow != null || panel != null || music != null || !tick.IsEnabled) return 36;
+            if (settingsWindow != null || optionsPage != null || music != null || !tick.IsEnabled) return 36;
             if (Math.Abs(ActualWidth - 200) > 1 || Math.Abs(ActualHeight - 250) > 1) return 22;
             config.Glass = 100;
             ApplyGlass();
@@ -1037,6 +1052,16 @@ namespace NghiLe
             config.SelectedHolidays = new[] { "christmas" };
             UpdateClock(new DateTimeOffset(2027, 12, 25, 0, 0, 0, TimeSpan.FromHours(7)));
             if (!celebrating || greetingText.Text != "Giáng sinh an lành") return 69;
+            var cultureDay = new DateTimeOffset(2026, 11, 24, 0, 0, 0, HolidayCountdown.VietnamOffset);
+            config.SelectedHolidays = new[] { HolidaySetting.VietnamCultureDay };
+            UpdateClock(cultureDay.AddSeconds(-1));
+            if (displayedTheme != HolidayTheme.VietnamCultureDay || year.Text != HolidaySetting.VietnamCultureDayName ||
+                !holidayScene.IsAnimating || celebrating || time[2].Text != "01") return 79;
+            UpdateLayout();
+            UpdateClock(cultureDay);
+            if (!celebrating || greetingText.Text != HolidaySetting.VietnamCultureDayName || greetingDetail.Text != "24/11") return 80;
+            UpdateClock(cultureDay.AddDays(1));
+            if (celebrating || displayedTarget != cultureDay.AddYears(1)) return 81;
             config.SelectedHolidays = new string[0];
             UpdateClock(newYear);
             if (displayedTarget.HasValue || days.Text != "–" || dateStatus.Text != "Chưa chọn ngày nghỉ" ||
@@ -1067,15 +1092,20 @@ namespace NghiLe
             UpdateLayout();
             settingsWindow.UpdateLayout();
             if (!settingsWindow.IsVisible || settingsWindow.Title != "Cài đặt · " + ProductName ||
-                !weather.IsAnimating || !tick.IsEnabled || panel != null || music != null) return 24;
+                !weather.IsAnimating || !tick.IsEnabled || optionsPage != null || music != null) return 24;
             if (settingsWindow.ActualWidth < settingsWindow.MinWidth) return 38;
             if (Math.Abs(ActualWidth - 120) > 1 || Math.Abs(ActualHeight - 150) > 1) return 56;
             if (widgetPosition != new Point(Left, Top)) return 57;
-            ShowOptions();
-            ShowMusic();
+            var optionsTab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "OptionsTab");
+            var musicTab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "MusicTab");
+            if (optionsTab == null || musicTab == null) return 78;
+            musicTab.IsSelected = true;
             settingsWindow.UpdateLayout();
-            if (!music.IsVisible || music.ActualWidth < 200 ||
-                music.ActualHeight + music.Margin.Top > settingsWindow.ActualHeight || !weather.IsAnimating) return 34;
+            if (music == null || !music.IsVisible || music.ActualWidth < 200 ||
+                music.ActualHeight > settingsWindow.ActualHeight || !weather.IsAnimating || optionsPage != null) return 34;
+            optionsTab.IsSelected = true;
+            settingsWindow.UpdateLayout();
+            if (optionsPage == null || !optionsPage.IsVisible || music.IsVisible) return 78;
 
             OpenSettings();
             config.Horizontal = true;
@@ -1185,6 +1215,7 @@ namespace NghiLe
             var offset = newYear.Offset;
             var tet2027 = new DateTimeOffset(2027, 2, 6, 0, 0, 0, offset);
             var reference = new DateTimeOffset(2026, 11, 20, 0, 0, 0, offset);
+            var cultureDay = new DateTimeOffset(2026, 11, 24, 0, 0, 0, offset);
             var expectedNext = new[]
             {
                 Tuple.Create(HolidayTheme.NewYear, newYear),
@@ -1193,6 +1224,7 @@ namespace NghiLe
                 Tuple.Create(HolidayTheme.Reunification, new DateTimeOffset(2027, 4, 30, 0, 0, 0, offset)),
                 Tuple.Create(HolidayTheme.LabourDay, new DateTimeOffset(2027, 5, 1, 0, 0, 0, offset)),
                 Tuple.Create(HolidayTheme.NationalDay, new DateTimeOffset(2027, 9, 2, 0, 0, 0, offset)),
+                Tuple.Create(HolidayTheme.VietnamCultureDay, cultureDay),
                 Tuple.Create(HolidayTheme.MidAutumn, new DateTimeOffset(2027, 9, 15, 0, 0, 0, offset)),
                 Tuple.Create(HolidayTheme.Christmas, new DateTimeOffset(2026, 12, 25, 0, 0, 0, offset))
             };
@@ -1204,8 +1236,13 @@ namespace NghiLe
                 if (!actual.HasValue || actual.Value.Theme != theme || actual.Value.Date != expected.Item2 ||
                     actual.Value.Date.Offset != offset) return 77;
             }
+            s.SelectedHolidays = new[] { HolidaySetting.VietnamCultureDay };
+            if (HolidayCountdown.Find(s, cultureDay.AddYears(-1)).Value.Date != cultureDay ||
+                HolidayCountdown.Find(s, cultureDay.AddHours(23)).Value.LastDay != cultureDay ||
+                HolidayCountdown.Find(s, cultureDay.AddDays(1)).Value.Date != cultureDay.AddYears(1)) return 82;
             s.SelectedHolidays = HolidaySetting.All.Select(holiday => holiday.Id).ToArray();
-            if (HolidayCountdown.Find(s, reference).Value.Theme != HolidayTheme.Christmas ||
+            if (HolidayCountdown.Find(s, reference).Value.Theme != HolidayTheme.VietnamCultureDay ||
+                HolidayCountdown.Find(s, cultureDay.AddDays(1)).Value.Theme != HolidayTheme.Christmas ||
                 HolidayCountdown.Find(s, newYear.AddDays(1)).Value.Date != tet2027 ||
                 HolidayCountdown.Find(s, tet2027.AddDays(-2)).Value.Date != tet2027 ||
                 HolidayCountdown.Find(s, tet2027.AddDays(4).AddHours(23)).Value.Date != tet2027 ||
@@ -1223,7 +1260,7 @@ namespace NghiLe
             {
                 var file = new SettingsFile(path);
                 s.X = -200; s.Y = 10; s.Glass = 100; s.Scale = .6; s.Motion = false; s.AlwaysOnTop = false;
-                s.SelectedHolidays = new[] { HolidaySetting.LunarNewYear, "mid-autumn" };
+                s.SelectedHolidays = new[] { HolidaySetting.LunarNewYear, "mid-autumn", HolidaySetting.VietnamCultureDay };
                 s.SettingsWidth = 740;
                 s.SettingsHeight = 700;
                 s.ApricotNewYear = true;

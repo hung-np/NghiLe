@@ -1,28 +1,30 @@
 # Nghỉ Lễ · Đếm ngược ngày lễ
 
-Nghỉ Lễ là widget nổi cho Windows. Bản portable có giao diện riêng cho tám dịp ở cả hai bố cục đồng hồ, **Dọc** (200 × 250 px) và **Ngang** (360 × 84 px). Đồng hồ và hiệu ứng chạy offline. Hiệu ứng trang trí chạy tối đa 16 khung hình mỗi giây.
+Nghỉ Lễ là widget nổi cho Windows. Bản portable có giao diện riêng cho chín dịp ở cả hai bố cục đồng hồ, **Dọc** (200 × 250 px) và **Ngang** (360 × 84 px). Đồng hồ và hiệu ứng chạy offline. Hiệu ứng trang trí chạy tối đa 16 khung hình mỗi giây.
 
 ## Mở trên Windows
 
 1. Bấm đúp `NghiLe.exe` trong thư mục này. Bản portable dùng WPF và .NET Framework có sẵn trên máy kiểm tra. Bạn có thể chạy từ Downloads.
 2. Kéo mặt đồng hồ để di chuyển. Rê chuột lên widget và kéo **↘** ở góc dưới bên phải để đổi kích thước theo tỉ lệ của bố cục hiện tại. Ở bố cục dọc từ **160 × 200 px** trở xuống, widget ẩn dòng ngày và múi giờ rồi tăng cỡ tên năm và số ngày. Khi tay nắm nhận tiêu điểm, các phím mũi tên chỉnh kích thước từng bước. **F2** mở cài đặt và **Esc** quay về đồng hồ.
-3. **Cài đặt** mở trong cửa sổ riêng có thể kéo giãn. Sáu ngày nghỉ lễ được xếp thành hai hàng, mỗi hàng ba thẻ. Trung thu và Giáng sinh nằm ở nhóm bên dưới. Khi dùng lần đầu, **Tết Nguyên đán** được tích sẵn. Bộ đếm chọn dịp gần nhất trong các thẻ bạn tích. Trong **Tùy chọn → Hiển thị**, có thể đổi bố cục **Dọc** hoặc **Ngang**, **Luôn nổi**, **Chuyển động** và **Độ đậm kính**.
+3. **Cài đặt** mở trong cửa sổ riêng có thể kéo giãn. Ba tab **Ngày lễ**, **Tùy chọn** và **Nhạc** nằm ở đầu cửa sổ. Tab **Ngày lễ** liệt kê bảy ngày nghỉ lễ và hai ngày kỷ niệm, với ô chọn bên trái và ngày tháng bên phải. Khi dùng lần đầu, **Tết Nguyên đán** được tích sẵn. Bộ đếm chọn dịp gần nhất trong các dịp bạn tích. Trong **Tùy chọn → Hiển thị**, có thể đổi bố cục **Dọc** hoặc **Ngang**, **Luôn nổi**, **Chuyển động** và **Độ đậm kính**. Bấm **Xong** để quay về đồng hồ.
 4. Nút × ẩn cửa sổ. Bấm biểu tượng hoa ở khay hệ thống, xem thêm trong dấu mũi tên ^ nếu cần, hoặc mở lại `NghiLe.exe` để hiện widget. Bấm phải vào biểu tượng và chọn **Thoát Nghỉ Lễ** để dừng ứng dụng.
-5. Để Nghỉ Lễ tự mở lúc đăng nhập, bật **Mở cùng Windows** ngay trong **Cài đặt**. Công tắc mặc định tắt trên máy mới và chỉ áp dụng cho tài khoản Windows đang dùng. Khi nâng cấp từ Hẹn Tết hoặc Nhịp Ngày, thoát phiên bản cũ rồi mở `NghiLe.exe` từ cùng thư mục. Mục khởi động do bản cũ tạo trong thư mục đó sẽ trỏ sang tệp mới. Nếu chuyển ứng dụng sang thư mục khác, mở tệp ở vị trí mới rồi bật công tắc lại.
+5. Để Nghỉ Lễ tự mở lúc đăng nhập, bật **Mở cùng Windows** trong **Tùy chọn → Khởi động**. Công tắc mặc định tắt trên máy mới và chỉ áp dụng cho tài khoản Windows đang dùng. Khi nâng cấp từ Hẹn Tết hoặc Nhịp Ngày, thoát phiên bản cũ rồi mở `NghiLe.exe` từ cùng thư mục. Mục khởi động do bản cũ tạo trong thư mục đó sẽ trỏ sang tệp mới. Nếu chuyển ứng dụng sang thư mục khác, mở tệp ở vị trí mới rồi bật công tắc lại.
 
 Ứng dụng tiếp tục dùng `%LOCALAPPDATA%\HenTet\settings.json` sau khi đổi tên. Tệp này lưu vị trí, kích thước, bố cục, các dịp đã chọn, chế độ luôn nổi, hiệu ứng và độ đậm kính. Nếu tệp chưa có, ứng dụng vẫn đọc tùy chọn từ `%LOCALAPPDATA%\Nocturne\settings.json` để giữ vị trí và kích thước của bản cũ hơn.
 
-Dùng công tắc **Đào / Mai** trên thẻ **Tết Nguyên đán** trong Cài đặt để đổi giữa **Cành đào và bánh chưng** và **Cành mai và bánh tét**. Lựa chọn được lưu và áp dụng cho cả màn đếm ngược lẫn lời chúc năm mới.
+Dùng công tắc **Đào / Mai** trên dòng **Tết Nguyên đán** trong tab **Ngày lễ** để đổi giữa **Cành đào và bánh chưng** và **Cành mai và bánh tét**. Lựa chọn được lưu và áp dụng cho cả màn đếm ngược lẫn lời chúc năm mới.
 
 ## Phát nhạc
 
-Đặt tệp MP3, WAV hoặc M4A trực tiếp vào thư mục `nhac` cạnh `NghiLe.exe`. Vào **Cài đặt → Tùy chọn → Nhạc**, chọn bài rồi bấm **Bắt đầu phát**. Bấm nút này khi chưa chọn bài sẽ phát từ đầu danh sách. Khi đang nghe, chọn bài khác sẽ dừng bài hiện tại và chờ bạn bấm **Bắt đầu phát**. Danh sách sắp theo tên tệp và tự cập nhật khi mở mục Nhạc hoặc khi chuyển bài. Sau khi bắt đầu phát, ứng dụng phát lần lượt và quay về bài đầu khi hết danh sách. Nhạc tiếp tục khi quay về đồng hồ và dừng khi thoát ứng dụng.
+Đặt tệp MP3, WAV hoặc M4A trực tiếp vào thư mục `nhac` cạnh `NghiLe.exe`. Vào **Cài đặt → Nhạc**, chọn bài rồi bấm **Bắt đầu phát**. Bấm nút này khi chưa chọn bài sẽ phát từ đầu danh sách. Khi đang nghe, chọn bài khác sẽ dừng bài hiện tại và chờ bạn bấm **Bắt đầu phát**. Danh sách sắp theo tên tệp và tự cập nhật khi mở mục Nhạc hoặc khi chuyển bài. Sau khi bắt đầu phát, ứng dụng phát lần lượt và quay về bài đầu khi hết danh sách. Nhạc tiếp tục khi quay về đồng hồ và dừng khi thoát ứng dụng.
 
 Bản Tauri dùng thư mục `nhac` ở gốc dự án khi chạy chế độ phát triển hoặc cạnh tệp thực thi khi build. Các tệp nhạc riêng nằm ngoài Git và gói phát hành.
 
 ## Lịch đếm ngược
 
 Bản portable đếm tới 00:00 giờ Việt Nam, giữ giao diện của dịp đang diễn ra và tự chuyển sau khi hết ngày hoặc kỳ nghỉ. **Tết Nguyên đán**, **Trung thu** và **Giáng sinh** hiện lời chúc khi bộ đếm về 0.
+
+**Ngày Văn hóa Việt Nam** là ngày nghỉ 24/11 Dương lịch hằng năm, bắt đầu từ 2026. Widget dùng hình Nhà hát Lớn Hà Nội cách điệu và hiển thị màn hình kỷ niệm trong ngày 24/11. [Nghị quyết 28/2026/QH16](https://xaydungchinhsach.chinhphu.vn/toan-van-nghi-quyet-so-28-2026-qh16-ve-phat-trien-van-hoa-viet-nam-119260508142130402.htm)
 
 Các bảng âm lịch bao phủ **2026–2036** cho [Tết Nguyên đán](https://www.qppstudio.net/global-holidays-observances/tet-nguyen-dan-vietnamese-new-year.htm), [Giỗ Tổ Hùng Vương](https://time.so/holidays/vietnam/hung-kings-commemoration-day/) và [Trung thu](https://vietnam-calendar.com/holidays/mid-autumn-festival).
 

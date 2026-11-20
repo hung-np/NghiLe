@@ -3,7 +3,7 @@ using System.Linq;
 
 namespace NghiLe
 {
-    internal enum HolidayTheme { LunarNewYear, NewYear, HungKings, Reunification, LabourDay, NationalDay, MidAutumn, Christmas }
+    internal enum HolidayTheme { LunarNewYear, NewYear, HungKings, Reunification, LabourDay, NationalDay, MidAutumn, Christmas, VietnamCultureDay }
 
     internal struct HolidayOccurrence
     {
@@ -54,10 +54,11 @@ namespace NghiLe
         {
             if (!holiday.IsLunar)
             {
-                var occurrence = Period(holiday.Theme, Midnight(local.Year, holiday.Month, holiday.Day));
+                int year = Math.Max(local.Year, holiday.FirstYear);
+                var occurrence = Period(holiday.Theme, Midnight(year, holiday.Month, holiday.Day));
                 if (occurrence.LastDay.Date >= local.Date) return occurrence;
-                return local.Year == 9999 ? (HolidayOccurrence?)null :
-                    Period(holiday.Theme, Midnight(local.Year + 1, holiday.Month, holiday.Day));
+                return year == 9999 ? (HolidayOccurrence?)null :
+                    Period(holiday.Theme, Midnight(year + 1, holiday.Month, holiday.Day));
             }
 
             bool fixedYear = holiday.Theme == HolidayTheme.LunarNewYear && !settings.Automatic;

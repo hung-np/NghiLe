@@ -197,10 +197,10 @@ namespace NghiLe
         private string[] displayed;
         private bool rendering;
 
-        internal MusicView(Playlist playlist, Action back) : base("Nhạc", "Về cài đặt", back)
+        internal MusicView(Playlist playlist) : base("Danh sách nhạc")
         {
             this.playlist = playlist;
-            songs = new ListBox { FontSize = 11, Background = (Brush)FindResource("PanelField"),
+            songs = new ListBox { FontSize = 14, Background = (Brush)FindResource("PanelField"),
                 BorderBrush = (Brush)FindResource("PanelLine"), BorderThickness = new Thickness(1),
                 Foreground = (Brush)FindResource("PanelInk"), Padding = new Thickness(2),
                 ItemTemplate = (DataTemplate)FindResource("PanelTrackItem") };
@@ -214,9 +214,10 @@ namespace NghiLe
                 if (!rendering && songs.SelectedItem is TrackItem)
                     playlist.Select(((TrackItem)songs.SelectedItem).Path);
             };
-            toggle = new Button { Content = "Bắt đầu phát", Style = (Style)FindResource("PanelPrimary") };
+            toggle = new Button { Content = "Bắt đầu phát", Style = (Style)FindResource("PanelPrimary"),
+                FontSize = 14, MinHeight = 34, MinWidth = 130, HorizontalAlignment = HorizontalAlignment.Left };
             toggle.Click += (s, e) => playlist.Toggle();
-            status = new TextBlock { Foreground = (Brush)FindResource("PanelMuted"), FontSize = 10,
+            status = new TextBlock { Foreground = (Brush)FindResource("PanelMuted"), FontSize = 13,
                 TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 0, 0, 5) };
             var footer = new StackPanel();
             footer.Children.Add(status);

@@ -18,6 +18,7 @@ namespace NghiLe
         private static readonly Lazy<DrawingGroup> Workers = DeferScene(DrawWorkers);
         private static readonly Lazy<DrawingGroup> BaDinh = DeferScene(DrawBaDinh);
         private static readonly Lazy<DrawingGroup> NationalFlag = DeferScene(DrawNationalFlag);
+        private static readonly Lazy<DrawingGroup> OperaHouse = DeferScene(DrawOperaHouse);
         private static readonly Lazy<DrawingGroup> Moon = DeferScene(DrawMoon);
         private static readonly Lazy<DrawingGroup> Lantern = DeferScene(DrawLantern);
         private static readonly Lazy<DrawingGroup> Mooncakes = DeferScene(DrawMooncakes);
@@ -58,6 +59,10 @@ namespace NghiLe
                     if (moving) drawing.PushTransform(new SkewTransform(0, Math.Sin(phase * 4 * Math.PI) * 3.3, 29, 24));
                     drawing.DrawDrawing(NationalFlag.Value);
                     if (moving) drawing.Pop();
+                    break;
+                case HolidayTheme.VietnamCultureDay:
+                    drawing.DrawDrawing(OperaHouse.Value);
+                    if (moving) DrawFloatingLights(drawing, phase, 11, 111, 5, GoldSpark, 7);
                     break;
                 case HolidayTheme.MidAutumn:
                     drawing.DrawDrawing(Moon.Value);
@@ -172,6 +177,27 @@ namespace NghiLe
             drawing.DrawEllipse(AmberGlow, null, new Point(x, 25), 14, 8);
             drawing.DrawEllipse(AmberGlow, null, new Point(x - 4, 35), 10, 3);
             drawing.Pop();
+        }
+
+        private static void DrawOperaHouse(DrawingContext drawing)
+        {
+            drawing.DrawEllipse(Glow("#9EDEAA5E", "#00DEAA5E"), null, new Point(65, 28), 57, 27);
+            Path(drawing, "#C2245C54", "M7 49 Q4 42 11 39 Q8 32 15 31 Q16 25 21 28 Q27 31 24 36 Q30 38 28 47 L101 47 Q97 37 105 35 Q101 29 109 27 Q116 26 116 34 Q123 37 120 43 Q125 45 121 49 Z");
+            Path(drawing, "#55736A", "M19 24 L24 18 H41 L49 25 H81 L89 18 H106 L111 24 V31 H19 Z");
+            Path(drawing, "#C59356", "M18 25 H112 V46 H18 Z");
+            Path(drawing, "#EAC58B", "M39 24 H91 V47 H39 Z M17 25 H40 V27 H17 Z M90 25 H113 V27 H90 Z");
+            Path(drawing, "#33504A", "M25 36 V32 Q27 28 29 32 V36 Z M32 36 V32 Q34 28 36 32 V36 Z M94 36 V32 Q96 28 98 32 V36 Z M101 36 V32 Q103 28 105 32 V36 Z M23 40 H36 V44 H23 Z M94 40 H107 V44 H94 Z");
+            Path(drawing, "#3D5148", "M48 30 H82 V45 H48 Z");
+            var column = new Pen(Paint("#F7DA9D"), 2.5);
+            for (int i = 0; i < 6; i++)
+            {
+                double x = 43 + i * 8.8;
+                drawing.DrawLine(column, new Point(x, 29), new Point(x, 45));
+            }
+            Path(drawing, "#F3D299", "M37 25 L65 13 93 25 V29 H37 Z M15 46 H115 V48 H15 Z M21 48 H109 V50 H21 Z M27 50 H103 V51 H27 Z");
+            StrokePath(drawing, "#987042", .65, "M43 24 L65 15.5 87 24 M39 26 H91 M40 45 H90");
+            drawing.DrawEllipse(Paint("#B88850"), null, new Point(65, 21.4), 2, 1.8);
+            StrokePath(drawing, "#A8D6B474", .65, "M11 54 H48 M82 54 H119 M57 54 Q61 54 65 57 Q69 54 73 54");
         }
 
         private static void DrawWorkers(DrawingContext drawing)
