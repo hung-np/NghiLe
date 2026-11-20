@@ -20,14 +20,15 @@ using Drawing = System.Drawing;
 
 [assembly: AssemblyTitle(NghiLe.Widget.ProductName)]
 [assembly: AssemblyProduct(NghiLe.Widget.ProductName)]
-[assembly: AssemblyVersion("0.1.11.0")]
-[assembly: AssemblyFileVersion("0.1.11.0")]
+[assembly: AssemblyVersion("0.1.13.0")]
+[assembly: AssemblyFileVersion("0.1.13.0")]
 
 namespace NghiLe
 {
     public sealed class Settings
     {
         public int Version { get; set; }
+        public CountdownUnit CounterMode { get; set; }
         public bool Automatic { get; set; }
         public int Year { get; set; }
         public bool AlwaysOnTop { get; set; }
@@ -44,6 +45,7 @@ namespace NghiLe
 
         public Settings()
         {
+            CounterMode = CountdownUnit.Days;
             Automatic = true;
             Year = 2027;
             AlwaysOnTop = true;
@@ -108,6 +110,7 @@ namespace NghiLe
 
     internal sealed class SettingsFile
     {
+        private const int SettingsVersion = 4;
         private readonly string path;
         private readonly string legacyPath;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -124,6 +127,7 @@ namespace NghiLe
                 var source = !File.Exists(path) && legacyPath != null ? legacyPath : path;
                 var s = json.Deserialize<Settings>(File.ReadAllText(source));
                 if (s == null) return new Settings();
+                if (!Enum.IsDefined(typeof(CountdownUnit), s.CounterMode)) s.CounterMode = CountdownUnit.Days;
                 if (!Calendar.Holidays.Any(d => d.Year == s.Year)) s.Year = Calendar.Holidays[0].Year;
                 s.Glass = s.Version < 2 && s.Glass == 88 ? 100 : Math.Max(42, Math.Min(100, s.Glass));
                 s.Scale = WidgetSize.Clamp(s.Scale);
@@ -147,7 +151,7 @@ namespace NghiLe
             {
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
                 string temp = path + ".tmp";
-                s.Version = 3;
+                s.Version = SettingsVersion;
                 File.WriteAllText(temp, json.Serialize(s));
                 if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
                 return true;
@@ -206,6 +210,8 @@ namespace NghiLe
         private bool ready;
         private bool compact;
         private DateTimeOffset? displayedTarget;
+        private CountdownUnit? displayedUnit;
+        private long displayedExtraDays;
         private HolidayTheme? displayedTheme;
         private bool celebrating;
         private string unavailableStatus;
@@ -269,6 +275,7 @@ namespace NghiLe
             LocationChanged += (s, e) => { if (ready) ScheduleSave(); };
             Loaded += (s, e) => { PlaceOnScreen(); ready = true; Persist(); };
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+            Microsoft.Win32.SystemEvents.TimeChanged += OnTimeChanged;
             tick.Tick += (s, e) => TickClock();
             save.Tick += (s, e) => Persist();
             IsVisibleChanged += (s, e) =>
@@ -289,6 +296,7 @@ namespace NghiLe
             Closed += (s, e) =>
             {
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+                Microsoft.Win32.SystemEvents.TimeChanged -= OnTimeChanged;
                 tick.Stop(); save.Stop();
                 if (music != null) music.Dispose();
                 tray.Dispose(); icon.Dispose();
@@ -302,6 +310,11 @@ namespace NghiLe
         private void OnDisplaySettingsChanged(object sender, EventArgs args)
         {
             Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) PlaceOnScreen(); }));
+        }
+
+        private void OnTimeChanged(object sender, EventArgs args)
+        {
+            Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) UpdateClock(); }));
         }
 
         private void PlaceOnScreen(bool preservePosition = false)
@@ -478,7 +491,6 @@ namespace NghiLe
             }
             if (weather != null) weather.Visibility = showPeach ? Visibility.Visible : Visibility.Collapsed;
             holidayScene.ShowTheme(theme, config.ApricotNewYear);
-            UpdateTitleTypography();
             UpdateMotion();
         }
 
@@ -603,8 +615,11 @@ namespace NghiLe
             bool abbreviated = compact || config.Horizontal;
             bool wideNumber = days.Text.Length >= 4;
             days.FontSize = config.Horizontal ? (wideNumber ? 32 : days.Text.Length == 3 ? 41 : 46) : wideNumber ? 62 : compact ? 87 : 70;
+            string symbol = displayedSeconds < 0 ? "NGÀY" : CountdownUnits.Symbol(config.CounterMode);
+            if (displayedExtraDays > 0 && displayedSeconds > 0)
+                symbol += " · " + displayedExtraDays.ToString(CultureInfo.InvariantCulture) + " NGÀY";
             dayUnit.Text = abbreviated && days.Text == "–" ? (unavailableStatus == "Hết dữ liệu lịch" ? "HẾT DỮ LIỆU" : "NGÀY") :
-                abbreviated && displayedSeconds == 0 ? (displayedTheme == HolidayTheme.LunarNewYear ? "TẾT ĐÃ ĐẾN" : "HÔM NAY") : "NGÀY";
+                abbreviated && displayedSeconds == 0 ? (displayedTheme == HolidayTheme.LunarNewYear ? "TẾT ĐÃ ĐẾN" : "HÔM NAY") : symbol;
         }
 
         private void UpdateClockTimer()
@@ -621,16 +636,16 @@ namespace NghiLe
         private void TickClock()
         {
             var now = DateTimeOffset.UtcNow;
-            var untilNextSecond = TimeSpan.TicksPerSecond - now.UtcTicks % TimeSpan.TicksPerSecond;
-            tick.Interval = TimeSpan.FromMilliseconds(Math.Ceiling((double)untilNextSecond / TimeSpan.TicksPerMillisecond));
             UpdateClock(now);
+            var period = displayedSeconds > 0 ? TimeSpan.TicksPerSecond : TimeSpan.TicksPerMinute;
+            var remaining = period - now.UtcTicks % period;
+            tick.Interval = TimeSpan.FromMilliseconds(Math.Ceiling((double)remaining / TimeSpan.TicksPerMillisecond));
         }
 
-        private void UpdateClock() { UpdateClock(DateTimeOffset.UtcNow); }
+        private void UpdateClock() { TickClock(); }
 
-        private void UpdateClock(DateTimeOffset now)
+        private HolidayOccurrence? GetHoliday(DateTimeOffset local)
         {
-            var local = now.ToOffset(HolidayCountdown.VietnamOffset);
             int fixedYear = config.Automatic ? 0 : config.Year;
             if (holidayLookupDate != local.Date || holidayLookupSelection != config.SelectedHolidays || holidayLookupFixedYear != fixedYear)
             {
@@ -639,30 +654,41 @@ namespace NghiLe
                 holidayLookupSelection = config.SelectedHolidays;
                 holidayLookupFixedYear = fixedYear;
             }
-            var occurrence = holidayLookupResult;
+            return holidayLookupResult;
+        }
+
+        private void UpdateClock(DateTimeOffset now)
+        {
+            var local = now.ToOffset(HolidayCountdown.VietnamOffset);
+            var unit = config.CounterMode;
+            bool unitChanged = unit != displayedUnit;
+            var occurrence = GetHoliday(local);
             var target = occurrence.HasValue ? (DateTimeOffset?)occurrence.Value.Date : null;
             var theme = occurrence.HasValue ? (HolidayTheme?)occurrence.Value.Theme : null;
             string unavailable = target.HasValue ? null : config.SelectedHolidays.Length == 0 ? "Chưa chọn ngày nghỉ" : "Hết dữ liệu lịch";
             var seconds = target.HasValue ? Calendar.Seconds(target.Value, now) : -1;
-            string greetingTitle = seconds == 0 && local.Date <= occurrence.Value.LastDay.Date ? GreetingFor(theme) : null;
+            string greetingTitle = occurrence.HasValue && seconds == 0 && local.Date <= occurrence.Value.LastDay.Date ? GreetingFor(theme) : null;
             bool showGreeting = greetingTitle != null;
             bool themeChanged = theme != displayedTheme || unavailable != unavailableStatus;
             bool targetChanged = target != displayedTarget || themeChanged;
-            if (!targetChanged && seconds == displayedSeconds && celebrating == showGreeting) return;
+            if (!targetChanged && !unitChanged && seconds == displayedSeconds && celebrating == showGreeting) return;
 
             bool dateChanged = targetChanged || (seconds == 0) != (displayedSeconds == 0);
-            bool daysChanged = targetChanged || seconds / 86400 != displayedSeconds / 86400;
+            bool quantityChanged = targetChanged || unitChanged || seconds / 86400 != displayedSeconds / 86400;
             displayedTarget = target;
             displayedSeconds = seconds;
             displayedTheme = theme;
+            displayedUnit = unit;
             unavailableStatus = unavailable;
             if (themeChanged) ApplyHolidayTheme(theme);
+            if (themeChanged) UpdateTitleTypography();
             if (targetChanged || celebrating != showGreeting) UpdateGreeting(greetingTitle, theme, target, local);
             if (!target.HasValue)
             {
                 year.Text = config.Horizontal || compact ? unavailable : ProductName;
+                displayedExtraDays = 0;
                 days.Text = "–";
-                foreach (var unit in time) unit.Text = "–";
+                foreach (var label in time) label.Text = "–";
                 dateStatus.Text = unavailable;
                 ToolTip = unavailable;
                 UpdateDayPresentation();
@@ -675,14 +701,19 @@ namespace NghiLe
                     HolidaySetting.All.First(holiday => holiday.Theme == theme).Name;
                 ToolTip = year.Text + " · " + day.ToString("dd/MM/yyyy") + " · Giờ Việt Nam";
             }
-            if (daysChanged) SetNumber(days, (seconds / 86400).ToString(CultureInfo.InvariantCulture));
+            if (quantityChanged)
+            {
+                var quantity = CountdownUnits.Measure(unit, day, seconds);
+                displayedExtraDays = quantity.ExtraDays;
+                SetNumber(days, quantity.WholeUnits.ToString(CultureInfo.InvariantCulture));
+            }
             SetNumber(time[0], clockNumbers[seconds / 3600 % 24]);
             SetNumber(time[1], clockNumbers[seconds / 60 % 60]);
             SetNumber(time[2], clockNumbers[seconds % 60]);
             if (dateChanged)
                 dateStatus.Text = seconds == 0 ? (theme == HolidayTheme.LunarNewYear ? "Tết này đã đến" : "Hôm nay") :
                     day.ToString("dd/MM/yyyy") + " · Giờ Việt Nam";
-            if (daysChanged || dateChanged) UpdateDayPresentation();
+            if (quantityChanged || dateChanged) UpdateDayPresentation();
         }
 
         private static string GreetingFor(HolidayTheme? theme)
@@ -759,11 +790,17 @@ namespace NghiLe
             surface.Children.Add(controls);
         }
 
-        private FrameworkElement BuildSettings()
+        private void BuildCountdownSettings(StackPanel fields)
         {
-            var muted = (Brush)settingsWindow.FindResource("PanelMuted");
-            var fields = new StackPanel();
             fields.Children.Add(PanelPage.SectionHeading("Đếm ngược", settingsWindow, 0));
+            var units = new ComboBox { Name = "CounterUnit", Width = 184, MinHeight = 30, FontSize = 14,
+                HorizontalAlignment = HorizontalAlignment.Right };
+            System.Windows.Automation.AutomationProperties.SetName(units, "Đơn vị hiển thị");
+            foreach (CountdownUnit unit in Enum.GetValues(typeof(CountdownUnit)))
+                units.Items.Add(new ComboBoxItem { Content = CountdownUnits.Label(unit), Tag = unit });
+            units.SelectedIndex = (int)config.CounterMode;
+            AddOptionRow(fields, units, "Đơn vị hiển thị");
+
             var select = new ComboBox { Width = 184, MinHeight = 30, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Right };
             System.Windows.Automation.AutomationProperties.SetName(select, "Năm Tết");
             select.SetBinding(ToolTipProperty, new Binding("SelectionBoxItem") { Source = select });
@@ -781,6 +818,21 @@ namespace NghiLe
                 Persist();
             };
             AddOptionRow(fields, select, "Sự kiện");
+            units.SelectionChanged += (s, e) =>
+            {
+                var choice = units.SelectedItem as ComboBoxItem;
+                if (choice == null) return;
+                config.CounterMode = (CountdownUnit)choice.Tag;
+                UpdateClock();
+                Persist();
+            };
+        }
+
+        private FrameworkElement BuildSettings()
+        {
+            var muted = (Brush)settingsWindow.FindResource("PanelMuted");
+            var fields = new StackPanel();
+            BuildCountdownSettings(fields);
             fields.Children.Add(PanelPage.SectionHeading("Hiển thị", settingsWindow, 20));
             var layout = new ComboBox { Width = 112, MinHeight = 30, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Right };
             System.Windows.Automation.AutomationProperties.SetName(layout, "Bố cục");
@@ -982,6 +1034,33 @@ namespace NghiLe
             foreach (var number in time) number.BeginAnimation(OpacityProperty, null);
         }
 
+        private bool CheckCountdownUnits()
+        {
+            var target = new DateTimeOffset(2027, 2, 6, 0, 0, 0, HolidayCountdown.VietnamOffset);
+            var sample = target.AddDays(-77).AddSeconds(-30810);
+            UpdateClock(sample);
+            if (config.CounterMode != CountdownUnit.Days || days.Text != "77" || dayUnit.Text != "NGÀY") return false;
+            var title = year.Text;
+            var background = glass.Background;
+            var margin = face.Margin;
+
+            config.CounterMode = CountdownUnit.Weeks;
+            UpdateClock(sample);
+            if (days.Text != "11" || dayUnit.Text != "TUẦN") return false;
+            config.CounterMode = CountdownUnit.Months;
+            UpdateClock(sample);
+            if (days.Text != "2" || dayUnit.Text != "THÁNG · 16 NGÀY" || displayedTarget != target ||
+                displayedTheme != HolidayTheme.LunarNewYear || year.Text != title || !ReferenceEquals(glass.Background, background) ||
+                face.Margin != margin || time[0].Text != "08" || time[1].Text != "33" || time[2].Text != "30") return false;
+
+            config.CounterMode = CountdownUnit.Weeks;
+            UpdateClock(sample.AddDays(1));
+            if (days.Text != "10" || dayUnit.Text != "TUẦN · 6 NGÀY") return false;
+            config.CounterMode = CountdownUnit.Days;
+            UpdateClock(sample);
+            return days.Text == "77" && dayUnit.Text == "NGÀY" && displayedTarget == target;
+        }
+
         internal int CheckWindowLifecycle()
         {
             if (!IsVisible || !AllowsTransparency || ShowInTaskbar || !tray.Visible ||
@@ -989,6 +1068,7 @@ namespace NghiLe
                 !tray.ContextMenuStrip.Items.Cast<Forms.ToolStripItem>().Any(item => item.Text == "Thoát " + ProductName)) return 21;
             if (settingsWindow != null || optionsPage != null || music != null || !tick.IsEnabled) return 36;
             if (Math.Abs(ActualWidth - 200) > 1 || Math.Abs(ActualHeight - 250) > 1) return 22;
+            if (!CheckCountdownUnits()) return 83;
             config.Glass = 100;
             ApplyGlass();
             var fill = (DrawingBrush)glass.Background;
@@ -1106,6 +1186,15 @@ namespace NghiLe
             optionsTab.IsSelected = true;
             settingsWindow.UpdateLayout();
             if (optionsPage == null || !optionsPage.IsVisible || music.IsVisible) return 78;
+            var units = (ComboBox)LogicalTreeHelper.FindLogicalNode(optionsPage, "CounterUnit");
+            if (units == null || units.Items.Count != 3 || units.SelectedIndex != (int)CountdownUnit.Days) return 84;
+            var activeTarget = displayedTarget;
+            foreach (var unit in new[] { CountdownUnit.Weeks, CountdownUnit.Months, CountdownUnit.Days })
+            {
+                units.SelectedIndex = (int)unit;
+                if (config.CounterMode != unit || displayedTarget != activeTarget ||
+                    !tick.IsEnabled || file.Read().CounterMode != unit || !weather.IsAnimating) return 85;
+            }
 
             OpenSettings();
             config.Horizontal = true;
@@ -1189,8 +1278,35 @@ namespace NghiLe
             finally { File.Delete(path); }
         }
 
+        private static bool CheckUnits()
+        {
+            var offset = HolidayCountdown.VietnamOffset;
+            var months = new[]
+            {
+                Tuple.Create(new DateTimeOffset(2027, 5, 1, 0, 0, 0, offset), 30),
+                Tuple.Create(new DateTimeOffset(2027, 2, 1, 0, 0, 0, offset), 31),
+                Tuple.Create(new DateTimeOffset(2027, 3, 1, 0, 0, 0, offset), 28),
+                Tuple.Create(new DateTimeOffset(2028, 3, 1, 0, 0, 0, offset), 29),
+                Tuple.Create(new DateTimeOffset(2029, 1, 1, 0, 0, 0, offset), 31)
+            };
+            foreach (var month in months)
+            {
+                var target = month.Item1;
+                long seconds = month.Item2 * 86400L;
+                var wholeMonth = CountdownUnits.Measure(CountdownUnit.Months, target, seconds);
+                var partialMonth = CountdownUnits.Measure(CountdownUnit.Months, target, seconds - 1);
+                if (wholeMonth.WholeUnits != 1 || wholeMonth.ExtraDays != 0 ||
+                    partialMonth.WholeUnits != 0 || partialMonth.ExtraDays != month.Item2 - 1) return false;
+            }
+            var endOfFebruary = new DateTimeOffset(2027, 2, 28, 0, 0, 0, offset);
+            var clampedMonth = CountdownUnits.Measure(CountdownUnit.Months, endOfFebruary, 28 * 86400L);
+            var weeks = CountdownUnits.Measure(CountdownUnit.Weeks, endOfFebruary, 79 * 86400L);
+            return clampedMonth.WholeUnits == 1 && clampedMonth.ExtraDays == 0 && weeks.WholeUnits == 11 && weeks.ExtraDays == 2;
+        }
+
         private static int SelfTest()
         {
+            if (!CheckUnits()) return 87;
             var s = new Settings { Automatic = false, Year = 2027 };
             var eve = new DateTimeOffset(2027, 2, 5, 17, 0, 0, TimeSpan.Zero);
             var d = HolidayCountdown.Find(s, eve);
@@ -1259,29 +1375,37 @@ namespace NghiLe
             try
             {
                 var file = new SettingsFile(path);
+                if (file.Read().CounterMode != CountdownUnit.Days) return 88;
                 s.X = -200; s.Y = 10; s.Glass = 100; s.Scale = .6; s.Motion = false; s.AlwaysOnTop = false;
                 s.SelectedHolidays = new[] { HolidaySetting.LunarNewYear, "mid-autumn", HolidaySetting.VietnamCultureDay };
                 s.SettingsWidth = 740;
                 s.SettingsHeight = 700;
                 s.ApricotNewYear = true;
+                s.CounterMode = CountdownUnit.Weeks;
                 if (!file.Save(s)) return 14;
                 s.Year = 2030; s.Automatic = false; s.Horizontal = true;
+                s.CounterMode = CountdownUnit.Months;
                 if (!file.Save(s)) return 15;
                 var restored = file.Read();
                 if (restored.Year != 2030 || restored.Automatic || restored.Motion || restored.AlwaysOnTop ||
                     restored.Glass != 100 || restored.Scale != .6 || restored.X != -200 || restored.Y != 10 || !restored.Horizontal ||
+                    restored.CounterMode != CountdownUnit.Months ||
                     !restored.SelectedHolidays.SequenceEqual(s.SelectedHolidays) ||
                     restored.SettingsWidth != 740 || restored.SettingsHeight != 700 || !restored.ApricotNewYear) return 16;
                 File.WriteAllText(path, "{\"Glass\":88}");
                 var legacyDefaults = file.Read();
                 if (legacyDefaults.Scale != 1 || legacyDefaults.Glass != 100 || legacyDefaults.Horizontal ||
+                    legacyDefaults.CounterMode != CountdownUnit.Days ||
                     !legacyDefaults.SelectedHolidays.SequenceEqual(new[] { HolidaySetting.LunarNewYear })) return 18;
                 restored.Glass = 88;
                 restored.SelectedHolidays = new string[0];
                 if (!file.Save(restored) || file.Read().Glass != 88 || file.Read().SelectedHolidays.Length != 0) return 19;
                 File.Move(path, legacyPath);
                 var migrated = new SettingsFile(path, legacyPath).Read();
-                if (migrated.Scale != restored.Scale || migrated.Year != restored.Year || migrated.Glass != 88) return 33;
+                if (migrated.Scale != restored.Scale || migrated.Year != restored.Year || migrated.Glass != 88 ||
+                    migrated.CounterMode != CountdownUnit.Months) return 33;
+                File.WriteAllText(path, "{\"Version\":4,\"CounterMode\":3}");
+                if (file.Read().CounterMode != CountdownUnit.Days) return 89;
                 File.WriteAllText(path, "{oops!");
                 return file.Read().Automatic ? 0 : 17;
             }

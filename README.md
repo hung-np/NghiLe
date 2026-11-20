@@ -10,7 +10,7 @@ Nghỉ Lễ là widget nổi cho Windows. Bản portable có giao diện riêng 
 4. Nút × ẩn cửa sổ. Bấm biểu tượng hoa ở khay hệ thống, xem thêm trong dấu mũi tên ^ nếu cần, hoặc mở lại `NghiLe.exe` để hiện widget. Bấm phải vào biểu tượng và chọn **Thoát Nghỉ Lễ** để dừng ứng dụng.
 5. Để Nghỉ Lễ tự mở lúc đăng nhập, bật **Mở cùng Windows** trong **Tùy chọn → Khởi động**. Công tắc mặc định tắt trên máy mới và chỉ áp dụng cho tài khoản Windows đang dùng. Khi nâng cấp từ Hẹn Tết hoặc Nhịp Ngày, thoát phiên bản cũ rồi mở `NghiLe.exe` từ cùng thư mục. Mục khởi động do bản cũ tạo trong thư mục đó sẽ trỏ sang tệp mới. Nếu chuyển ứng dụng sang thư mục khác, mở tệp ở vị trí mới rồi bật công tắc lại.
 
-Ứng dụng tiếp tục dùng `%LOCALAPPDATA%\HenTet\settings.json` sau khi đổi tên. Tệp này lưu vị trí, kích thước, bố cục, các dịp đã chọn, chế độ luôn nổi, hiệu ứng và độ đậm kính. Nếu tệp chưa có, ứng dụng vẫn đọc tùy chọn từ `%LOCALAPPDATA%\Nocturne\settings.json` để giữ vị trí và kích thước của bản cũ hơn.
+Ứng dụng tiếp tục dùng `%LOCALAPPDATA%\HenTet\settings.json` sau khi đổi tên. Tệp này lưu đơn vị hiển thị bộ đếm, vị trí, kích thước, bố cục, các dịp đã chọn, chế độ luôn nổi, hiệu ứng và độ đậm kính. Nếu tệp chưa có, ứng dụng vẫn đọc tùy chọn từ `%LOCALAPPDATA%\Nocturne\settings.json` để giữ vị trí và kích thước của bản cũ hơn.
 
 Dùng công tắc **Đào / Mai** trên dòng **Tết Nguyên đán** trong tab **Ngày lễ** để đổi giữa **Cành đào và bánh chưng** và **Cành mai và bánh tét**. Lựa chọn được lưu và áp dụng cho cả màn đếm ngược lẫn lời chúc năm mới.
 
@@ -21,6 +21,8 @@ Dùng công tắc **Đào / Mai** trên dòng **Tết Nguyên đán** trong tab 
 Bản Tauri dùng thư mục `nhac` ở gốc dự án khi chạy chế độ phát triển hoặc cạnh tệp thực thi khi build. Các tệp nhạc riêng nằm ngoài Git và gói phát hành.
 
 ## Lịch đếm ngược
+
+Trong **Tùy chọn → Đếm ngược → Đơn vị hiển thị**, chọn **Theo ngày**, **Theo tuần** hoặc **Theo tháng** để đổi cách hiển thị thời gian tới cùng một dịp. Tuần gồm bảy ngày. Tháng được tính theo lịch từ thời điểm hiện tại đến ngày lễ. Số ngày lẻ hiện cạnh đơn vị, và bộ đếm vẫn hiển thị giờ, phút, giây. Lựa chọn được lưu tự động và mặc định là **Theo ngày**.
 
 Bản portable đếm tới 00:00 giờ Việt Nam, giữ giao diện của dịp đang diễn ra và tự chuyển sau khi hết ngày hoặc kỳ nghỉ. **Tết Nguyên đán**, **Trung thu** và **Giáng sinh** hiện lời chúc khi bộ đếm về 0.
 

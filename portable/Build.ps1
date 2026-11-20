@@ -17,7 +17,7 @@ $hungKings = Join-Path $root 'data/hung-kings.csv'
 $midAutumn = Join-Path $root 'data/mid-autumn.csv'
 $artwork = Join-Path $root 'data/peach.json'
 $theme = Join-Path $PSScriptRoot 'PanelTheme.xaml'
-$sources = 'NghiLe.cs', 'HolidayCountdown.cs', 'HolidayScene.cs', 'HolidayArtwork.cs', 'PeachScene.cs', 'PanelPage.cs', 'SettingsWindow.cs', 'Music.cs', 'MusicChecks.cs', 'StartupShortcut.cs' | ForEach-Object { Join-Path $PSScriptRoot $_ }
+$sources = 'NghiLe.cs', 'CountdownUnits.cs', 'HolidayCountdown.cs', 'HolidayScene.cs', 'HolidayArtwork.cs', 'PeachScene.cs', 'PanelPage.cs', 'SettingsWindow.cs', 'Music.cs', 'MusicChecks.cs', 'StartupShortcut.cs' | ForEach-Object { Join-Path $PSScriptRoot $_ }
 & (Join-Path $framework 'csc.exe') /nologo /target:winexe /optimize+ /platform:anycpu /codepage:65001 @libs "/win32icon:$icon" "/win32manifest:$manifest" "/resource:$data,NghiLe.Calendar" "/resource:$hungKings,NghiLe.HungKings" "/resource:$midAutumn,NghiLe.MidAutumn" "/resource:$artwork,NghiLe.Peach" "/resource:$theme,NghiLe.PanelTheme" "/out:$output" @sources
 if ($LASTEXITCODE -ne 0) { throw 'Portable build failed.' }
 Get-Item -LiteralPath $output | Select-Object Name, Length

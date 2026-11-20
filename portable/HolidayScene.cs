@@ -20,18 +20,44 @@ namespace NghiLe
         private static readonly Point DrumCenter = new Point(87, 28);
         private static readonly EllipseGeometry DrumFace = new EllipseGeometry(DrumCenter, 24, 24);
         private static readonly Lazy<Brush> DrumShine = new Lazy<Brush>(CreateDrumShine);
+        private static readonly DoubleAnimation PhaseCycle = CreatePhaseCycle();
         private static readonly DependencyProperty PhaseProperty = DependencyProperty.Register(
             "Phase", typeof(double), typeof(HolidayScene), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+        private Size artworkSize = Size.Empty;
+        private Transform placement = Transform.Identity;
         private HolidayTheme? theme;
         private bool moving;
         private bool celebrating;
         private bool apricotNewYear;
         private bool compact;
+        private bool horizontal;
 
         internal HolidayScene() { IsHitTestVisible = false; }
 
+        private void UpdatePlacement()
+        {
+            var size = RenderSize;
+            if (artworkSize == size) return;
+            artworkSize = size;
+            horizontal = size.Width > size.Height;
+            double scale = horizontal ? 1 : .93;
+            double x = horizontal ? 0 : (size.Width - 130 * scale) / 2;
+            var transform = new MatrixTransform(scale, 0, 0, scale, x, horizontal ? 1 : 0);
+            transform.Freeze();
+            placement = transform;
+        }
+
+        private static DoubleAnimation CreatePhaseCycle()
+        {
+            var cycle = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(8)) { RepeatBehavior = RepeatBehavior.Forever };
+            Timeline.SetDesiredFrameRate(cycle, PeachScene.FramesPerSecond);
+            cycle.Freeze();
+            return cycle;
+        }
+
         internal void ShowTheme(HolidayTheme? value, bool apricot)
         {
+            if (theme == value && apricotNewYear == apricot) return;
             theme = value;
             apricotNewYear = apricot;
             InvalidateVisual();
@@ -48,6 +74,7 @@ namespace NghiLe
 
         internal void SetCelebration(bool value)
         {
+            if (celebrating == value) return;
             celebrating = value;
             InvalidateVisual();
         }
@@ -57,24 +84,15 @@ namespace NghiLe
             enabled = enabled && theme.HasValue;
             if (enabled == moving) return;
             moving = enabled;
-            if (!moving) BeginAnimation(PhaseProperty, null);
-            else
-            {
-                var cycle = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(8)) { RepeatBehavior = RepeatBehavior.Forever };
-                Timeline.SetDesiredFrameRate(cycle, PeachScene.FramesPerSecond);
-                BeginAnimation(PhaseProperty, cycle);
-            }
+            BeginAnimation(PhaseProperty, moving ? PhaseCycle : null);
             InvalidateVisual();
         }
 
         protected override void OnRender(DrawingContext drawing)
         {
             if (!theme.HasValue) return;
-            bool horizontal = ActualWidth > ActualHeight;
-            double scale = horizontal ? 1 : .93;
-            double x = horizontal ? 0 : (ActualWidth - 130 * scale) / 2;
-            drawing.PushTransform(new TranslateTransform(x, horizontal ? 1 : 0));
-            drawing.PushTransform(new ScaleTransform(scale, scale));
+            UpdatePlacement();
+            drawing.PushTransform(placement);
             double phase = (double)GetValue(PhaseProperty);
             if (theme == HolidayTheme.NewYear)
             {
@@ -106,7 +124,6 @@ namespace NghiLe
                 if (moving && phase < .68) DrawDrumShine(drawing, phase / .68);
             }
             else DrawHolidayArtwork(drawing, theme.Value, phase, horizontal);
-            drawing.Pop();
             drawing.Pop();
             if (!horizontal) DrawVerticalForeground(drawing, theme.Value, phase);
         }
