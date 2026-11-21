@@ -10,21 +10,26 @@ namespace NghiLe
         private static readonly Brush AmberLight = Paint("#FFF1C0");
         private static readonly Brush GoldSpark = Paint("#FFE1A5");
         private static readonly Brush MoonSpark = Paint("#E3D7FF");
-        private static readonly Brush WinterSpark = Paint("#BCE6DB");
+        private static readonly Brush Snow = Paint("#F5FCFF");
         private static readonly Lazy<DrawingGroup> Envelope = DeferScene(DrawEnvelope);
         private static readonly Lazy<DrawingGroup> NewYearSpark = DeferScene(drawing =>
             DrawStar(drawing, new Point(), 2.8, GoldSpark, null));
-        private static readonly Lazy<DrawingGroup> Palace = DeferScene(DrawPalace);
-        private static readonly Lazy<DrawingGroup> Workers = DeferScene(DrawWorkers);
-        private static readonly Lazy<DrawingGroup> BaDinh = DeferScene(DrawBaDinh);
+        private static readonly Lazy<ImageDrawing> Palace = DeferImage(DrawPalace);
+        private static readonly Lazy<DrawingGroup> PalaceFlag = DeferScene(DrawPalaceFlag);
+        private static readonly Lazy<ImageDrawing> Workers = DeferImage(DrawWorkers);
+        private static readonly Lazy<DrawingGroup> WorkersGear = DeferScene(DrawWorkersGear);
+        private static readonly Point GearHub = new Point(101, 23);
+        private static readonly Lazy<ImageDrawing> BaDinh = DeferImage(DrawBaDinh);
         private static readonly Lazy<DrawingGroup> NationalFlag = DeferScene(DrawNationalFlag);
-        private static readonly Lazy<DrawingGroup> OperaHouse = DeferScene(DrawOperaHouse);
-        private static readonly Lazy<DrawingGroup> Moon = DeferScene(DrawMoon);
+        private static readonly Lazy<ImageDrawing> OperaHouse = DeferImage(DrawOperaHouse);
+        private static readonly Lazy<DrawingGroup> OperaBeam = DeferScene(DrawOperaBeam);
+        private static readonly Lazy<ImageDrawing> Moon = DeferImage(DrawMoon);
+        private static readonly Lazy<DrawingGroup> MoonClouds = DeferScene(DrawMoonClouds);
         private static readonly Lazy<DrawingGroup> Lantern = DeferScene(DrawLantern);
         private static readonly Lazy<DrawingGroup> Mooncakes = DeferScene(DrawMooncakes);
-        private static readonly Lazy<DrawingGroup> Pine = DeferScene(DrawPine);
+        private static readonly Lazy<ImageDrawing> Pine = DeferImage(DrawPine);
         private static readonly Lazy<DrawingGroup> NewYearOrnament = DeferScene(DrawNewYearOrnament);
-        private static readonly Lazy<DrawingGroup> ApricotBranch = DeferScene(DrawApricotBranch);
+        private static readonly Lazy<ImageDrawing> ApricotBranch = DeferImage(DrawApricotBranch);
         private static readonly Point[] ApricotHooks =
         {
             new Point(51, 19), new Point(77, 23), new Point(104, 20), new Point(117, 32)
@@ -49,30 +54,33 @@ namespace NghiLe
                 case HolidayTheme.Reunification:
                     drawing.DrawDrawing(Palace.Value);
                     if (moving) DrawPalaceLight(drawing, phase);
+                    DrawWavingFlag(drawing, PalaceFlag.Value, 64, 15, phase, 11);
                     break;
                 case HolidayTheme.LabourDay:
                     drawing.DrawDrawing(Workers.Value);
-                    if (moving) DrawFloatingLights(drawing, phase, 80, 38, 24, GoldSpark, 6);
+                    if (moving) drawing.PushTransform(new RotateTransform(phase * 360, GearHub.X, GearHub.Y));
+                    drawing.DrawDrawing(WorkersGear.Value);
+                    if (moving) drawing.Pop();
                     break;
                 case HolidayTheme.NationalDay:
                     drawing.DrawDrawing(BaDinh.Value);
-                    if (moving) drawing.PushTransform(new SkewTransform(0, Math.Sin(phase * 4 * Math.PI) * 3.3, 29, 24));
-                    drawing.DrawDrawing(NationalFlag.Value);
-                    if (moving) drawing.Pop();
+                    DrawWavingFlag(drawing, NationalFlag.Value, 29, 24, phase, 8);
                     break;
                 case HolidayTheme.VietnamCultureDay:
+                    if (moving) DrawOperaLights(drawing, phase);
                     drawing.DrawDrawing(OperaHouse.Value);
-                    if (moving) DrawFloatingLights(drawing, phase, 11, 111, 5, GoldSpark, 7);
                     break;
                 case HolidayTheme.MidAutumn:
                     drawing.DrawDrawing(Moon.Value);
-                    if (moving) DrawFloatingLights(drawing, phase, 63, 59, 5, MoonSpark, 5);
+                    if (moving) drawing.PushTransform(new TranslateTransform(Math.Sin(phase * 2 * Math.PI) * 9, 0));
+                    drawing.DrawDrawing(MoonClouds.Value);
+                    if (moving) drawing.Pop();
                     if (horizontal) DrawHarvestForeground(drawing, phase);
                     break;
                 case HolidayTheme.Christmas:
-                    if (moving) DrawFloatingLights(drawing, phase, 66, 56, 9, WinterSpark, 6);
                     drawing.DrawDrawing(Pine.Value);
                     DrawChristmasLights(drawing, moving ? phase : 0, celebrating);
+                    if (moving) DrawSnowfall(drawing, phase);
                     break;
                 case HolidayTheme.LunarNewYear:
                     drawing.DrawDrawing(NewYearOrnament.Value);
@@ -80,18 +88,19 @@ namespace NghiLe
                     else if (moving) DrawFloatingLights(drawing, phase, 17, 98, 18, GoldSpark, 6);
                     if (apricotNewYear)
                     {
-                        double movement = moving ? Math.Sin(phase * Math.PI * 2) * 1.8 : 0;
+                        double movement = moving ? Math.Sin(phase * Math.PI * 2) * 2.8 : 0;
                         drawing.PushTransform(new RotateTransform(movement, 125, 13));
                         drawing.DrawDrawing(ApricotBranch.Value);
                         for (int i = 0; i < ApricotHooks.Length; i++)
                         {
                             var hook = ApricotHooks[i];
-                            double sway = moving ? Math.Sin(phase * 4 * Math.PI + i * .95) * (6.5 - i * .55) : 0;
+                            double sway = moving ? Math.Sin(phase * 4 * Math.PI + i * .95) * (10 - i * .8) : 0;
                             DrawHangingEnvelope(drawing, hook.X, hook.Y, ApricotRestAngles[i] + sway);
                         }
                         drawing.Pop();
                         if (moving) DrawApricotPetals(drawing, phase, celebrating);
                     }
+                    else PeachScene.Draw(drawing, phase, moving, horizontal);
                     if (horizontal) drawing.DrawDrawing(apricotNewYear ? RolledRiceCake.Value : SquareRiceCake.Value);
                     break;
             }
@@ -124,6 +133,8 @@ namespace NghiLe
 
         private void DrawHarvestForeground(DrawingContext drawing, double phase)
         {
+            double swing = moving ? Math.Sin(phase * 4 * Math.PI) * 15 : 0;
+            drawing.PushTransform(new RotateTransform(swing, 44, 42));
             if (moving || celebrating)
             {
                 double pulse = moving ? .74 + .26 * Math.Cos(phase * 4 * Math.PI) : 1;
@@ -132,6 +143,7 @@ namespace NghiLe
                 drawing.Pop();
             }
             drawing.DrawDrawing(Lantern.Value);
+            drawing.Pop();
             drawing.DrawDrawing(Mooncakes.Value);
         }
 
@@ -166,16 +178,29 @@ namespace NghiLe
             StrokePath(drawing, "#D79E61", .55, "M20 52 H110 M24 46 H104 M28 26 H102");
             StrokePath(drawing, "#98A475", .7, "M8 52 Q13 42 18 42 M14 53 Q19 37 24 38 M119 51 Q116 40 110 39 M124 53 Q121 45 117 44");
             Path(drawing, "#D7B679", "M63 10 H64 V25 H63 Z");
-            Path(drawing, "#D74848", "M64 11 H80 V19 H64 Z");
-            DrawStar(drawing, new Point(72, 15), 2.8, Paint("#FFD474"), null);
+        }
+
+        private static void DrawPalaceFlag(DrawingContext drawing)
+        {
+            Path(drawing, "#F76153", "M64 11 Q71 8.5 82 11 V20 Q75 17 64 20 Z");
+            DrawStar(drawing, new Point(73, 14.8), 3.2, GoldSpark, null);
+        }
+
+        private void DrawWavingFlag(DrawingContext drawing, DrawingGroup flag, double poleX, double poleY,
+            double phase, double amplitude)
+        {
+            if (moving)
+                drawing.PushTransform(new SkewTransform(0, Math.Sin(phase * 4 * Math.PI) * amplitude, poleX, poleY));
+            drawing.DrawDrawing(flag);
+            if (moving) drawing.Pop();
         }
 
         private static void DrawPalaceLight(DrawingContext drawing, double phase)
         {
             double x = 18 + 96 * phase;
-            drawing.PushOpacity(Math.Sin(phase * Math.PI) * .55);
-            drawing.DrawEllipse(AmberGlow, null, new Point(x, 25), 14, 8);
-            drawing.DrawEllipse(AmberGlow, null, new Point(x - 4, 35), 10, 3);
+            drawing.PushOpacity(Math.Sin(phase * Math.PI) * .84);
+            drawing.DrawEllipse(AmberGlow, null, new Point(x, 28), 18, 11);
+            drawing.DrawEllipse(AmberGlow, null, new Point(x - 5, 39), 14, 6);
             drawing.Pop();
         }
 
@@ -200,19 +225,34 @@ namespace NghiLe
             StrokePath(drawing, "#A8D6B474", .65, "M11 54 H48 M82 54 H119 M57 54 Q61 54 65 57 Q69 54 73 54");
         }
 
+        private static void DrawOperaBeam(DrawingContext drawing)
+        {
+            var light = new LinearGradientBrush(PaintColor("#20FFDCA1"), PaintColor("#D7FFDCA1"),
+                new Point(.5, 0), new Point(.5, 1));
+            light.GradientStops.Insert(1, new GradientStop(PaintColor("#88FFDCA1"), .7));
+            drawing.DrawGeometry(light, null, Geometry.Parse("M0 0 Q-4 -24 -14 -63 Q0 -68 14 -63 Q4 -24 0 0 Z"));
+            drawing.DrawEllipse(AmberGlow, null, new Point(), 6, 3);
+        }
+
+        private static void DrawOperaLights(DrawingContext drawing, double phase)
+        {
+            double sweep = Math.Sin(phase * 2 * Math.PI);
+            drawing.PushTransform(new TranslateTransform(17, 48));
+            drawing.PushTransform(new RotateTransform(29 + sweep * 23));
+            drawing.DrawDrawing(OperaBeam.Value);
+            drawing.Pop();
+            drawing.Pop();
+            drawing.PushTransform(new TranslateTransform(113, 48));
+            drawing.PushTransform(new RotateTransform(-29 + sweep * 23));
+            drawing.DrawDrawing(OperaBeam.Value);
+            drawing.Pop();
+            drawing.Pop();
+        }
+
         private static void DrawWorkers(DrawingContext drawing)
         {
             Path(drawing, "#D46642", "M12 54 L58 6 H75 L29 54 Z M35 54 L82 6 H90 L44 54 Z M100 54 L123 30 H129 L108 54 Z");
             Path(drawing, "#365C76", "M68 54 V37 H76 V32 H82 V41 L95 33 V42 L107 34 V54 Z M112 54 V20 H117 V54 Z");
-            var cog = new Pen(Paint("#BB8CA5B2"), .65);
-            var hub = new Point(101, 25);
-            drawing.DrawEllipse(null, cog, hub, 9, 9);
-            drawing.DrawEllipse(null, cog, hub, 5.7, 5.7);
-            for (int i = 0; i < 10; i++)
-            {
-                double angle = i * Math.PI / 5;
-                drawing.DrawLine(cog, Polar(hub, 8, angle), Polar(hub, 11, angle));
-            }
             StrokePath(drawing, "#9FA7A5", .6, "M74 47 H79 M86 47 H91 M96 47 H101 M74 50 H79 M86 50 H91 M96 50 H101");
             Path(drawing, "#27435D", "M26 56 Q28 42 39 39 L48 34 62 38 Q69 43 73 56 Z");
             Path(drawing, "#F1B584", "M45 23 L61 21 61 31 57 37 49 36 45 31 Z");
@@ -221,6 +261,21 @@ namespace NghiLe
             Path(drawing, "#ED9B63", "M39 39 L44 37 47 43 53 46 59 42 62 38 66 40 60 49 53 52 45 49 Z M39 49 H46 V52 H39 Z");
             Path(drawing, "#AB665A", "M58 27 H64 L64 30 61 30 60 34 56 36 51 35 48 32 52 33 57 33 58 30 Z");
             StrokePath(drawing, "#FFE6AE", .7, "M43 22 Q49 15 55 15 M46 31 Q49 28 51 30 M31 54 Q34 45 39 43 M63 42 Q68 45 70 53");
+        }
+
+        private static void DrawWorkersGear(DrawingContext drawing)
+        {
+            drawing.DrawEllipse(Paint("#B330465A"), new Pen(Paint("#D69965"), 1.4), GearHub, 10, 10);
+            var teeth = new Pen(Paint("#F5BE7F"), 2.6) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            for (int i = 0; i < 8; i++)
+            {
+                double angle = i * Math.PI / 4;
+                drawing.DrawLine(teeth, Polar(GearHub, 9, angle), Polar(GearHub, 12.1, angle));
+            }
+            var spokes = new Pen(Paint("#BA9C8A"), 1.1);
+            for (int i = 0; i < 4; i++)
+                drawing.DrawLine(spokes, GearHub, Polar(GearHub, 7, .35 + i * Math.PI / 2));
+            drawing.DrawEllipse(GoldSpark, null, GearHub, 2, 2);
         }
 
         private static void DrawBaDinh(DrawingContext drawing)
@@ -255,10 +310,14 @@ namespace NghiLe
             drawing.DrawEllipse(craters, null, new Point(104, 10), 1.7, 1.2);
             DrawStar(drawing, new Point(119, 11), 1.6, MoonSpark, null);
             DrawStar(drawing, new Point(71, 13), 1.4, MoonSpark, null);
-            Path(drawing, "#C375668C", "M72 27 Q78 22 83 26 Q89 21 94 25 Q103 22 109 27 Q115 21 121 26 L127 28 Q100 31 72 29 Z");
-            Path(drawing, "#C2B09AC2", "M79 26 Q86 24 90 26 Q99 23 105 27 L119 27 Q97 29 79 27 Z");
             Path(drawing, "#A54C466D", "M52 47 Q64 41 75 36 Q80 33 93 41 Q103 36 111 40 L128 43 V50 H52 Z");
             Path(drawing, "#A982759F", "M62 43 Q69 39 76 41 Q87 37 92 41 Q101 39 109 42 L121 44 Q89 47 62 45 Z");
+        }
+
+        private static void DrawMoonClouds(DrawingContext drawing)
+        {
+            Path(drawing, "#DC7D6D99", "M69 27 Q78 21 83 26 Q89 20 94 25 Q104 22 110 27 Q115 21 121 26 L124 28 Q100 32 69 29 Z");
+            Path(drawing, "#E0C8B7DF", "M76 27 Q85 23 90 26 Q99 23 105 27 L115 27 Q97 30 76 28 Z");
         }
 
         private static void DrawLantern(DrawingContext drawing)
@@ -341,10 +400,23 @@ namespace NghiLe
         {
             for (int i = 0; i < ChristmasLights.Length; i++)
             {
-                double flicker = .63 + .16 * Math.Cos((phase * 2 - i * .12) * 2 * Math.PI);
+                double flicker = .69 + .27 * Math.Cos((phase * 2 - i * .12) * 2 * Math.PI);
                 drawing.PushOpacity(celebration ? Math.Min(1, flicker + .25) : flicker);
                 drawing.DrawEllipse(AmberGlow, null, ChristmasLights[i], celebration ? 7 : 4, celebration ? 7 : 4);
                 drawing.DrawEllipse(AmberLight, null, ChristmasLights[i], 1.65, 1.8);
+                drawing.Pop();
+            }
+        }
+
+        private static void DrawSnowfall(DrawingContext drawing, double phase)
+        {
+            for (int i = 0; i < 12; i++)
+            {
+                double fall = (phase + i * .17) % 1;
+                double x = 13 + i * 9 + Math.Sin(fall * 2 * Math.PI + i) * 5;
+                double size = i % 3 == 0 ? 1.65 : .95;
+                drawing.PushOpacity(Math.Sin(fall * Math.PI) * .92);
+                drawing.DrawEllipse(Snow, null, new Point(x, 3 + fall * 51), size, size);
                 drawing.Pop();
             }
         }
@@ -436,14 +508,14 @@ namespace NghiLe
 
         private static void DrawApricotPetals(DrawingContext drawing, double phase, bool celebration)
         {
-            int count = celebration ? 9 : 5;
+            int count = celebration ? 10 : 7;
             for (int i = 0; i < count; i++)
             {
                 double fall = (phase + i / (double)count) % 1;
-                var point = new Point(50 + i * (67.0 / count) + Math.Sin(fall * 7 + i) * 5, 16 + fall * 34);
-                drawing.PushOpacity(Math.Sin(fall * Math.PI) * .80);
+                var point = new Point(39 + i * (78.0 / count) + Math.Sin(fall * 7 + i) * 7, 15 + fall * 39);
+                drawing.PushOpacity(Math.Sin(fall * Math.PI) * .92);
                 drawing.PushTransform(new RotateTransform(42 + fall * 230 + i * 19, point.X, point.Y));
-                drawing.DrawEllipse(ApricotPetal, null, point, 1.6, .8);
+                drawing.DrawEllipse(ApricotPetal, null, point, 2.15, 1.1);
                 drawing.Pop();
                 drawing.Pop();
             }

@@ -197,7 +197,7 @@ namespace NghiLe
         private string[] displayed;
         private bool rendering;
 
-        internal MusicView(Playlist playlist) : base("Danh sách nhạc")
+        internal MusicView(Playlist playlist, ResourceDictionary theme) : base("Danh sách nhạc", theme)
         {
             this.playlist = playlist;
             songs = new ListBox { FontSize = 14, Background = (Brush)FindResource("PanelField"),
@@ -267,7 +267,6 @@ namespace NghiLe
         {
             refresh.Stop();
             playlist.Changed -= Render;
-            playlist.Dispose();
         }
     }
 }

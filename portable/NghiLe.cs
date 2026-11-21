@@ -6,13 +6,13 @@ using System.Reflection;
 using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
@@ -20,8 +20,8 @@ using Drawing = System.Drawing;
 
 [assembly: AssemblyTitle(NghiLe.Widget.ProductName)]
 [assembly: AssemblyProduct(NghiLe.Widget.ProductName)]
-[assembly: AssemblyVersion("0.1.13.0")]
-[assembly: AssemblyFileVersion("0.1.13.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
+[assembly: AssemblyFileVersion("2.0.0.0")]
 
 namespace NghiLe
 {
@@ -164,7 +164,9 @@ namespace NghiLe
     internal sealed class Widget : Window
     {
         internal const string ProductName = "Nghỉ Lễ";
-        private static readonly DoubleAnimation numberFade = CreateNumberFade();
+        private const double HorizontalArtworkWidth = 124;
+        internal static readonly FontFamily CounterFont = new FontFamily("Bahnschrift, Segoe UI");
+        internal static readonly FontFamily DisplayFont = new FontFamily("Georgia, Segoe UI");
         private static readonly string[] clockNumbers = Enumerable.Range(0, 60)
             .Select(value => value.ToString("00", CultureInfo.InvariantCulture)).ToArray();
         internal static void ConfigureRendering()
@@ -176,10 +178,9 @@ namespace NghiLe
         private readonly SettingsFile file;
         private readonly Settings config;
         private readonly Border glass;
-        private readonly Border innerRim;
         private readonly Grid surface;
+        private HolidayPalette currentPalette = Palette(null);
         private SettingsWindow settingsWindow;
-        private PeachScene weather;
         private readonly HolidayScene holidayScene = new HolidayScene();
         private readonly Grid face = new Grid { IsHitTestVisible = false };
         private readonly StackPanel greeting = new StackPanel { IsHitTestVisible = false, Visibility = Visibility.Collapsed,
@@ -188,23 +189,29 @@ namespace NghiLe
         private readonly TextBlock greetingDetail = Label("", 11, false);
         private readonly StackPanel dayCount = new StackPanel();
         private readonly Grid divider = new Grid();
+        private readonly Rectangle perforation = new Rectangle { Height = 1, StrokeDashArray = new DoubleCollection { 1, 3 } };
         private readonly StackPanel controls = new StackPanel { Orientation = Orientation.Horizontal };
         private ScrollViewer optionsPage;
         private MusicView music;
+        private Playlist playlist;
         private Button resizeGrip;
         private Point resizeStart;
         private double resizeScale;
         private bool resizing;
         private readonly TextBlock year = Label("", 14, false);
+        private readonly DockPanel titleLabel = new DockPanel();
+        private readonly Border titleMark = new Border { Width = 2, Height = 12, CornerRadius = new CornerRadius(1),
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) };
         private readonly TextBlock days = Label("", 70, true);
         private readonly TextBlock dayUnit = Label("NGÀY", 10, false);
         private readonly Grid clock = new Grid();
         private readonly TextBlock dateStatus = Label("", 11, false);
-        private readonly TextBlock[] time = { Label("", 25, true), Label("", 25, true), Label("", 25, true) };
+        private readonly TextBlock[] time = { Label("", 24, true), Label("", 24, true), Label("", 24, true) };
         private readonly TextBlock[] clockUnits = new TextBlock[3];
         private readonly DispatcherTimer tick = new DispatcherTimer();
         private readonly DispatcherTimer save = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         private readonly Forms.NotifyIcon tray;
+        private readonly Forms.ContextMenu trayMenu;
         private readonly Drawing.Icon icon;
         private bool quitting;
         private bool ready;
@@ -235,29 +242,22 @@ namespace NghiLe
             controls.IsKeyboardFocusWithinChanged += (s, e) => UpdateControls();
 
             surface = new Grid { ClipToBounds = true };
-            glass = new Border { BorderThickness = new Thickness(1),
-                BorderBrush = GoldLine("#D6D9AA7A", "#6D8E4F4C", "#A0EDC894", 125),
-                Background = HolidayGlassPaint(Palette(null)), Child = surface };
+            glass = new Border { BorderThickness = new Thickness(1), Child = surface };
             Content = new Viewbox { Stretch = Stretch.Uniform, Child = glass };
-            innerRim = new Border { Margin = new Thickness(3),
-                BorderThickness = new Thickness(.65), BorderBrush = GoldLine("#57F9CF9F", "#126F343E", "#4BD7A471", 135),
-                IsHitTestVisible = false };
-            surface.Children.Add(innerRim);
             surface.Children.Add(holidayScene);
             BuildFace();
             BuildControls();
             BuildResizeGrip();
             ApplyOrientation();
             SetScale(config.Scale);
-            ApplyGlass();
             icon = Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location);
             tray = new Forms.NotifyIcon { Icon = icon, Text = ProductName + " · Đếm ngược ngày lễ", Visible = true };
-            var menu = new Forms.ContextMenuStrip();
-            menu.Items.Add("Mở widget", null, (s, e) => ShowWidget());
-            menu.Items.Add("Ẩn widget", null, (s, e) => Hide());
-            menu.Items.Add("Cài đặt", null, (s, e) => { if (!IsVisible) ShowWidget(); OpenSettings(); });
-            menu.Items.Add("Thoát " + ProductName, null, (s, e) => Quit());
-            tray.ContextMenuStrip = menu;
+            trayMenu = new Forms.ContextMenu();
+            trayMenu.MenuItems.Add("Mở widget", (s, e) => ShowWidget());
+            trayMenu.MenuItems.Add("Ẩn widget", (s, e) => Hide());
+            trayMenu.MenuItems.Add("Cài đặt", (s, e) => { if (!IsVisible) ShowWidget(); OpenSettings(); });
+            trayMenu.MenuItems.Add("Thoát " + ProductName, (s, e) => Quit());
+            tray.ContextMenu = trayMenu;
             tray.MouseClick += (s, e) => { if (e.Button == Forms.MouseButtons.Left) ShowWidget(); };
 
             PreviewMouseLeftButtonDown += (s, e) =>
@@ -283,8 +283,8 @@ namespace NghiLe
                 UpdateClockTimer();
                 if (!IsVisible && !quitting)
                 {
-                    if (settingsWindow != null) settingsWindow.Hide();
-                    Persist();
+                    if (settingsWindow != null) settingsWindow.Close();
+                    else Persist();
                 }
                 UpdateMotion();
             };
@@ -299,7 +299,8 @@ namespace NghiLe
                 Microsoft.Win32.SystemEvents.TimeChanged -= OnTimeChanged;
                 tick.Stop(); save.Stop();
                 if (music != null) music.Dispose();
-                tray.Dispose(); icon.Dispose();
+                if (playlist != null) playlist.Dispose();
+                tray.Dispose(); trayMenu.Dispose(); icon.Dispose();
                 System.Windows.Application.Current.Shutdown();
             };
             UpdateClock();
@@ -385,17 +386,10 @@ namespace NghiLe
         }
         private static SolidColorBrush ColorBrush(string value) { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(value)); }
 
-        private static LinearGradientBrush GoldLine(string first, string middle, string last, double angle)
-        {
-            var brush = new LinearGradientBrush(ColorBrush(first).Color, ColorBrush(last).Color, angle);
-            brush.GradientStops.Insert(1, new GradientStop(ColorBrush(middle).Color, .55));
-            return brush;
-        }
-
         private static TextBlock Label(string value, double size, bool serif)
         {
             var text = new TextBlock { Text = value, FontSize = size,
-                FontFamily = new FontFamily(serif ? "Georgia" : "Segoe UI"),
+                FontFamily = serif ? DisplayFont : new FontFamily("Segoe UI"),
                 Foreground = ColorBrush("#F5DCA8"), TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center };
             Typography.SetNumeralAlignment(text, FontNumeralAlignment.Tabular);
@@ -403,23 +397,28 @@ namespace NghiLe
             return text;
         }
 
+        private static void SetCounterTypeface(TextBlock number)
+        {
+            number.FontFamily = CounterFont;
+            number.FontWeight = FontWeights.SemiBold;
+        }
+
         private void ApplyGlass()
         {
-            glass.Background.Opacity = config.Glass / 100.0;
+            glass.Background = HolidayGlassPaint(currentPalette, config.Horizontal, config.Glass / 100.0);
         }
 
         private sealed class HolidayPalette
         {
-            internal readonly string From, Middle, To, Ink, Accent, Glow;
+            internal readonly string From, Middle, To, Ink, Accent;
 
-            internal HolidayPalette(string from, string middle, string to, string ink, string accent, string glow)
+            internal HolidayPalette(string from, string middle, string to, string ink, string accent)
             {
                 From = from;
                 Middle = middle;
                 To = to;
                 Ink = ink;
                 Accent = accent;
-                Glow = glow;
             }
         }
 
@@ -427,49 +426,51 @@ namespace NghiLe
         {
             switch (theme)
             {
-                case HolidayTheme.LunarNewYear: return new HolidayPalette("#842C3B", "#4D1828", "#27121D", "#FFF0CD", "#F2BB83", "#A9A64355");
-                case HolidayTheme.NewYear: return new HolidayPalette("#223254", "#122138", "#10152A", "#E8F2FF", "#A8C2EE", "#57486DB5");
-                case HolidayTheme.HungKings: return new HolidayPalette("#543827", "#38251F", "#20191A", "#F8D7A0", "#D7A76F", "#63895B38");
-                case HolidayTheme.Reunification: return new HolidayPalette("#53634C", "#2A4135", "#192C27", "#FFF1CE", "#EAC583", "#659B8D57");
-                case HolidayTheme.LabourDay: return new HolidayPalette("#344F67", "#24384E", "#192839", "#FFEDDA", "#EE9F72", "#75755A58");
-                case HolidayTheme.NationalDay: return new HolidayPalette("#9B2733", "#671C28", "#361522", "#FFF1CB", "#F7CD78", "#739B413D");
-                case HolidayTheme.VietnamCultureDay: return new HolidayPalette("#245B58", "#183F40", "#102729", "#FFF2D2", "#E5BB77", "#6894864E");
-                case HolidayTheme.MidAutumn: return new HolidayPalette("#45385F", "#2D244B", "#201B39", "#FFF1CB", "#F6BD8B", "#75684D8D");
-                case HolidayTheme.Christmas: return new HolidayPalette("#2E574A", "#1B3934", "#112924", "#FFF5DE", "#EBC58B", "#68548467");
-                default: return new HolidayPalette("#511B2C", "#361725", "#200F19", "#FFE4B9", "#EDC79E", "#50883F50");
+                case HolidayTheme.LunarNewYear: return new HolidayPalette("#783443", "#461C2C", "#291724", "#FFF0CD", "#F2BB83");
+                case HolidayTheme.NewYear: return new HolidayPalette("#263C60", "#172541", "#121C34", "#E8F2FF", "#BBD0F3");
+                case HolidayTheme.HungKings: return new HolidayPalette("#69472E", "#422C25", "#281F21", "#FFE3B5", "#E7BA85");
+                case HolidayTheme.Reunification: return new HolidayPalette("#4B6756", "#2E463E", "#1B302C", "#FFF1CE", "#EAC583");
+                case HolidayTheme.LabourDay: return new HolidayPalette("#3E5870", "#293D56", "#1B2B3D", "#FFEDDA", "#F4B184");
+                case HolidayTheme.NationalDay: return new HolidayPalette("#9A3239", "#60262E", "#3C1C29", "#FFF1CB", "#F7CD78");
+                case HolidayTheme.VietnamCultureDay: return new HolidayPalette("#2C625C", "#224B4B", "#162D33", "#FFF2D2", "#F1C98B");
+                case HolidayTheme.MidAutumn: return new HolidayPalette("#524269", "#342B51", "#27223F", "#FFF1CB", "#F6BD8B");
+                case HolidayTheme.Christmas: return new HolidayPalette("#346352", "#244841", "#172E2C", "#FFF5DE", "#EBC58B");
+                default: return new HolidayPalette("#344758", "#233549", "#192739", "#F6F2E5", "#EBD5AD");
             }
         }
 
-        private static DrawingBrush HolidayGlassPaint(HolidayPalette palette)
+        private static LinearGradientBrush HolidayGlassPaint(HolidayPalette palette, bool horizontal, double glass)
         {
-            var bounds = new RectangleGeometry(new Rect(0, 0, WidgetSize.Width, WidgetSize.Height));
-            var fill = GoldLine(palette.From, palette.Middle, palette.To, 126);
-            var highlight = ColorBrush(palette.Glow).Color;
-            var glow = new RadialGradientBrush(highlight, Color.FromArgb(0, highlight.R, highlight.G, highlight.B))
-            {
-                Center = new Point(.26, .14), GradientOrigin = new Point(.26, .10), RadiusX = .72, RadiusY = .87
-            };
-            var layers = new DrawingGroup();
-            layers.Children.Add(new GeometryDrawing(fill, null, bounds));
-            layers.Children.Add(new GeometryDrawing(glow, null, bounds));
-            return new DrawingBrush(layers);
+            var start = new Point(0, 0);
+            var end = horizontal ? new Point(1, .12) : new Point(.2, 1);
+            // The illustrated end follows the glass slider. The text end needs contrast on light desktops.
+            var brush = new LinearGradientBrush(Tint(palette.From, .26 + .74 * glass), Tint(palette.To, .62 + .38 * glass), start, end);
+            brush.GradientStops.Insert(1, new GradientStop(Tint(palette.Middle, .58 + .42 * glass), horizontal ? .32 : .29));
+            brush.Freeze();
+            return brush;
+        }
+
+        private static Color Tint(string value, double opacity)
+        {
+            var color = (Color)ColorConverter.ConvertFromString(value);
+            color.A = (byte)Math.Round(255 * opacity);
+            return color;
         }
 
         private void ApplyHolidayTheme(HolidayTheme? theme)
         {
-            var palette = theme == HolidayTheme.LunarNewYear && config.ApricotNewYear
-                ? new HolidayPalette("#8D361F", "#641F22", "#341619", "#FFF0C4", "#EDBE78", "#A7CE6243")
+            currentPalette = theme == HolidayTheme.LunarNewYear && config.ApricotNewYear
+                ? new HolidayPalette("#934A37", "#5E2928", "#361B25", "#FFF0C4", "#F4C57F")
                 : Palette(theme);
-            var accent = palette.Accent.Substring(1);
-            glass.Background = HolidayGlassPaint(palette);
-            glass.BorderBrush = GoldLine(palette.Ink, "#88" + accent, palette.Accent, 125);
-            innerRim.BorderBrush = GoldLine("#60" + accent, "#18" + accent, "#60" + accent, 135);
+            var palette = currentPalette;
             var caption = ColorBrush(palette.Ink);
             var small = ColorBrush(palette.Accent);
+            glass.BorderBrush = new SolidColorBrush(Tint(palette.Accent, .58));
             year.Foreground = caption;
+            titleMark.Background = small;
             dayUnit.Foreground = small;
             dateStatus.Foreground = small;
-            days.Foreground = GoldLine("#FFFFFF", palette.Ink, palette.Accent, 90);
+            days.Foreground = caption;
             greetingText.Foreground = caption;
             greetingDetail.Foreground = small;
             for (int i = 0; i < time.Length; i++)
@@ -477,61 +478,58 @@ namespace NghiLe
                 time[i].Foreground = caption;
                 clockUnits[i].Foreground = small;
             }
-            ((Border)divider.Children[0]).Background = GoldLine("#00" + accent, "#B0" + accent, "#00" + accent, 0);
-            ((Rectangle)divider.Children[1]).Fill = small;
-            foreach (var separator in clock.Children.OfType<Border>())
-                separator.Background = GoldLine("#00" + accent, "#50" + accent, "#00" + accent, 90);
-            ApplyGlass();
-            bool showPeach = theme == HolidayTheme.LunarNewYear && !config.ApricotNewYear;
-            if (showPeach && weather == null)
+            perforation.Stroke = new SolidColorBrush(Tint(palette.Accent, .56));
+            var buttonFill = ColorBrush(palette.To);
+            foreach (var button in controls.Children.OfType<Button>())
             {
-                weather = new PeachScene();
-                weather.SetHorizontal(config.Horizontal);
-                surface.Children.Insert(surface.Children.IndexOf(holidayScene) + 1, weather);
+                button.Foreground = caption;
+                button.Background = buttonFill;
+                button.BorderBrush = glass.BorderBrush;
             }
-            if (weather != null) weather.Visibility = showPeach ? Visibility.Visible : Visibility.Collapsed;
+            resizeGrip.Foreground = caption;
+            resizeGrip.Background = buttonFill;
+            resizeGrip.BorderBrush = glass.BorderBrush;
+            ApplyGlass();
             holidayScene.ShowTheme(theme, config.ApricotNewYear);
             UpdateMotion();
         }
 
         private void BuildFace()
         {
-            year.Foreground = ColorBrush("#FFE4B9");
             year.TextTrimming = TextTrimming.CharacterEllipsis;
-            days.Foreground = GoldLine("#FFF0CD", "#F9DDAB", "#E4AE73", 90);
-            dayUnit.Foreground = ColorBrush("#EDC79E");
-            face.Children.Add(year);
+            year.FontWeight = FontWeights.SemiBold;
+            year.TextAlignment = TextAlignment.Left;
+            year.TextWrapping = TextWrapping.NoWrap;
+            SetCounterTypeface(days);
+            dayUnit.FontWeight = FontWeights.SemiBold;
+            titleLabel.Children.Add(titleMark);
+            titleLabel.Children.Add(new Viewbox { Child = year, StretchDirection = StretchDirection.DownOnly,
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center });
+            face.Children.Add(titleLabel);
             dayCount.Children.Add(days);
             dayCount.Children.Add(dayUnit);
+            dayCount.VerticalAlignment = VerticalAlignment.Center;
             face.Children.Add(dayCount);
-            divider.Children.Add(new Border { Height = .7, VerticalAlignment = VerticalAlignment.Center,
-                Background = GoldLine("#00E8B583", "#ACE8B583", "#00E8B583", 0) });
-            divider.Children.Add(new Rectangle { Width = 4, Height = 4, Fill = ColorBrush("#ECC698"),
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-                RenderTransform = new RotateTransform(45), RenderTransformOrigin = new Point(.5, .5) });
+            divider.Children.Add(perforation);
             face.Children.Add(divider);
             string[] units = { "GIỜ", "PHÚT", "GIÂY" };
             for (int i = 0; i < time.Length; i++)
             {
                 clock.ColumnDefinitions.Add(new ColumnDefinition());
                 var pair = new StackPanel();
+                SetCounterTypeface(time[i]);
                 pair.Children.Add(time[i]);
                 var unit = Label(units[i], 8.75, false);
                 clockUnits[i] = unit;
-                unit.Foreground = ColorBrush("#EDC79E");
                 pair.Children.Add(unit);
                 Grid.SetColumn(pair, i);
                 clock.Children.Add(pair);
-                if (i == 0) continue;
-                var separator = new Border { Width = .65, Height = 23, VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = HorizontalAlignment.Left, Background = GoldLine("#00DAA373", "#5BDAA373", "#00DAA373", 90) };
-                Grid.SetColumn(separator, i);
-                clock.Children.Add(separator);
             }
             face.Children.Add(clock);
             dateStatus.FontSize = 10;
-            dateStatus.Margin = new Thickness(0, 8, 0, 0);
-            dateStatus.Foreground = ColorBrush("#E7BF93");
+            dateStatus.Margin = new Thickness(0, 6, 0, 0);
+            dateStatus.HorizontalAlignment = HorizontalAlignment.Left;
+            dateStatus.TextAlignment = TextAlignment.Left;
             face.Children.Add(dateStatus);
             surface.Children.Add(face);
             greetingText.TextWrapping = TextWrapping.Wrap;
@@ -549,16 +547,16 @@ namespace NghiLe
             glass.Width = size.Width;
             glass.Height = size.Height;
             glass.CornerRadius = new CornerRadius(radius);
-            innerRim.CornerRadius = new CornerRadius(radius - 4);
             surface.Clip = new RectangleGeometry(new Rect(0, 0, size.Width - 2, size.Height - 2), radius - 1, radius - 1);
-            if (weather != null) weather.SetHorizontal(horizontal);
+            ApplyGlass();
 
             face.RowDefinitions.Clear();
             face.ColumnDefinitions.Clear();
             if (horizontal)
             {
-                face.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
-                face.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(81) });
+                face.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(HorizontalArtworkWidth) });
+                face.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(94) });
+                face.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
                 face.ColumnDefinitions.Add(new ColumnDefinition());
             }
             else
@@ -568,20 +566,19 @@ namespace NghiLe
             }
             for (int i = 0; i < face.Children.Count; i++) Grid.SetRow(face.Children[i], horizontal ? 0 : i);
             Grid.SetColumn(dayCount, horizontal ? 1 : 0);
-            Grid.SetColumn(divider, horizontal ? 1 : 0);
-            Grid.SetColumn(clock, horizontal ? 2 : 0);
+            Grid.SetColumn(divider, horizontal ? 2 : 0);
+            Grid.SetColumn(clock, horizontal ? 3 : 0);
 
-            year.VerticalAlignment = horizontal ? VerticalAlignment.Bottom : VerticalAlignment.Center;
-            year.Margin = horizontal ? new Thickness(5, 0, 5, 8) : new Thickness(0);
-            dayCount.VerticalAlignment = VerticalAlignment.Center;
-            divider.Width = horizontal ? 50 : 152;
+            titleLabel.VerticalAlignment = horizontal ? VerticalAlignment.Bottom : VerticalAlignment.Center;
+            titleLabel.Margin = horizontal ? new Thickness(8, 0, 4, 5) : new Thickness(0, 0, 0, 4);
+            dayCount.Margin = horizontal ? new Thickness(2, 0, 2, 0) : new Thickness(2, 1, 2, 6);
+            divider.Width = horizontal ? 52 : 162;
             divider.Height = 11;
-            divider.HorizontalAlignment = horizontal ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+            divider.HorizontalAlignment = HorizontalAlignment.Center;
             divider.VerticalAlignment = VerticalAlignment.Center;
-            divider.Margin = horizontal ? new Thickness(-5, 0, 0, 0) : new Thickness(0, 3, 0, 0);
             divider.LayoutTransform = horizontal ? new RotateTransform(90) : Transform.Identity;
             clock.VerticalAlignment = VerticalAlignment.Center;
-            foreach (var number in time) number.FontSize = horizontal ? 24 : 25;
+            foreach (var number in time) number.FontSize = horizontal ? 23 : 25;
             ApplyFaceTypography(!horizontal && config.Scale <= WidgetSize.CompactScale);
             if (ready) ResizeWidget(true);
         }
@@ -592,21 +589,27 @@ namespace NghiLe
             holidayScene.SetCompact(useCompact);
             bool horizontal = config.Horizontal;
             face.VerticalAlignment = horizontal ? VerticalAlignment.Stretch : VerticalAlignment.Top;
-            face.Margin = horizontal ? new Thickness(0, 0, 18, 0) : new Thickness(12, compact ? 49 : 51, 12, 0);
-            UpdateTitleTypography();
+            face.Margin = horizontal ? new Thickness(0, 0, 14, 0) : new Thickness(15, compact ? 44 : 51, 15, 0);
+            titleLabel.Height = horizontal ? 17 : compact ? 23 : 19;
+            year.FontSize = horizontal ? 12 : compact ? 17 : 14;
+            double minTitleSize = horizontal ? 9.5 : compact ? 13 : 11;
+            double titleWidth = horizontal ? HorizontalArtworkWidth :
+                glass.Width - glass.BorderThickness.Left - glass.BorderThickness.Right - face.Margin.Left - face.Margin.Right;
+            titleWidth -= titleLabel.Margin.Left + titleLabel.Margin.Right + titleMark.Width + titleMark.Margin.Right;
+            // At the smallest font size, extra text is trimmed inside the single-line slot.
+            year.MaxWidth = titleWidth * year.FontSize / minTitleSize;
+            UpdateGreetingTypography();
             greeting.Margin = horizontal ? new Thickness(128, 0, 19, 0) : new Thickness(16, 42, 16, 0);
-            days.Height = horizontal ? 53 : compact ? 97 : 77;
+            days.Height = horizontal ? 49 : compact ? 91 : 73;
             dayUnit.FontSize = horizontal ? 9 : compact ? 11 : 9.5;
-            clock.Margin = horizontal ? new Thickness(0, 1, 0, 0) : new Thickness(0, 2, 0, 0);
             dateStatus.Visibility = horizontal || compact ? Visibility.Collapsed : Visibility.Visible;
             if (unavailableStatus != null) year.Text = horizontal || compact ? unavailableStatus : ProductName;
             UpdateDayPresentation();
         }
 
-        private void UpdateTitleTypography()
+        private void UpdateGreetingTypography()
         {
             bool cultureDay = displayedTheme == HolidayTheme.VietnamCultureDay;
-            year.FontSize = config.Horizontal ? (cultureDay ? 11 : 12) : compact ? (cultureDay ? 15 : 17) : 14;
             greetingText.FontSize = config.Horizontal ? (cultureDay ? 17.5 : 20) : 26;
         }
 
@@ -614,7 +617,7 @@ namespace NghiLe
         {
             bool abbreviated = compact || config.Horizontal;
             bool wideNumber = days.Text.Length >= 4;
-            days.FontSize = config.Horizontal ? (wideNumber ? 32 : days.Text.Length == 3 ? 41 : 46) : wideNumber ? 62 : compact ? 87 : 70;
+            days.FontSize = config.Horizontal ? (wideNumber ? 32 : days.Text.Length == 3 ? 40 : 46) : wideNumber ? 62 : compact ? 87 : 70;
             string symbol = displayedSeconds < 0 ? "NGÀY" : CountdownUnits.Symbol(config.CounterMode);
             if (displayedExtraDays > 0 && displayedSeconds > 0)
                 symbol += " · " + displayedExtraDays.ToString(CultureInfo.InvariantCulture) + " NGÀY";
@@ -681,7 +684,9 @@ namespace NghiLe
             displayedUnit = unit;
             unavailableStatus = unavailable;
             if (themeChanged) ApplyHolidayTheme(theme);
-            if (themeChanged) UpdateTitleTypography();
+            if (themeChanged) UpdateGreetingTypography();
+            if (dateChanged && settingsWindow != null)
+                settingsWindow.ShowOccurrence(theme, target, seconds == 0, unavailable);
             if (targetChanged || celebrating != showGreeting) UpdateGreeting(greetingTitle, theme, target, local);
             if (!target.HasValue)
             {
@@ -743,20 +748,9 @@ namespace NghiLe
             UpdateMotion();
         }
 
-        private void SetNumber(TextBlock view, string value)
+        private static void SetNumber(TextBlock view, string value)
         {
-            if (view.Text == value) return;
-            view.Text = value;
-            if (config.Motion && IsVisible)
-                view.BeginAnimation(OpacityProperty, numberFade);
-        }
-
-        private static DoubleAnimation CreateNumberFade()
-        {
-            var fade = new DoubleAnimation(.9, 1, TimeSpan.FromMilliseconds(170)) { FillBehavior = FillBehavior.Stop };
-            Timeline.SetDesiredFrameRate(fade, PeachScene.FramesPerSecond);
-            fade.Freeze();
-            return fade;
+            if (view.Text != value) view.Text = value;
         }
 
         private bool InControl(DependencyObject item)
@@ -774,7 +768,8 @@ namespace NghiLe
             var button = new Button { Content = name, ToolTip = tooltip, FontSize = 11,
                 Foreground = ColorBrush("#F5DCA8"), Background = ColorBrush("#BF341A25"),
                 BorderBrush = ColorBrush("#9AD6AA80"), Padding = new Thickness(5, 2, 5, 2),
-                Margin = new Thickness(0, 0, 4, 0), MinHeight = 22 };
+                Margin = new Thickness(0, 0, 4, 0), MinHeight = 22, Cursor = Cursors.Hand };
+            AutomationProperties.SetName(button, tooltip);
             if (action != null) button.Click += (s, e) => action();
             return button;
         }
@@ -998,8 +993,19 @@ namespace NghiLe
         private void OpenSettings()
         {
             if (settingsWindow == null)
+            {
                 settingsWindow = new SettingsWindow(this, config, () => { UpdateClock(); Persist(); },
                     ScheduleSave, BuildSettings, CreateMusic, SetSpringStyle);
+                settingsWindow.Closed += (s, e) =>
+                {
+                    if (music != null) music.Dispose();
+                    music = null;
+                    optionsPage = null;
+                    settingsWindow = null;
+                    if (!quitting) Persist();
+                };
+            }
+            settingsWindow.ShowOccurrence(displayedTheme, displayedTarget, displayedSeconds == 0, unavailableStatus);
             settingsWindow.OpenHolidays();
         }
 
@@ -1011,9 +1017,11 @@ namespace NghiLe
             Persist();
         }
 
-        private FrameworkElement CreateMusic()
+        private FrameworkElement CreateMusic(ResourceDictionary theme)
         {
-            music = new MusicView(new Playlist(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nhac")));
+            if (playlist == null)
+                playlist = new Playlist(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nhac"));
+            music = new MusicView(playlist, theme);
             return music;
         }
 
@@ -1026,12 +1034,7 @@ namespace NghiLe
 
         private void UpdateMotion()
         {
-            bool enabled = config.Motion && IsVisible;
-            if (weather != null) weather.SetMotion(enabled && displayedTheme == HolidayTheme.LunarNewYear && !config.ApricotNewYear);
-            holidayScene.SetMotion(enabled);
-            if (enabled) return;
-            days.BeginAnimation(OpacityProperty, null);
-            foreach (var number in time) number.BeginAnimation(OpacityProperty, null);
+            holidayScene.SetMotion(config.Motion && IsVisible);
         }
 
         private bool CheckCountdownUnits()
@@ -1061,25 +1064,53 @@ namespace NghiLe
             return days.Text == "77" && dayUnit.Text == "NGÀY" && displayedTarget == target;
         }
 
+        private bool CheckTitleLayout()
+        {
+            var original = year.Text;
+            try
+            {
+                year.Text = "Tết";
+                UpdateLayout();
+                var titleSize = titleLabel.RenderSize;
+                var artworkPosition = holidayScene.TranslatePoint(new Point(), glass);
+                var artworkSize = holidayScene.RenderSize;
+                var countPosition = dayCount.TranslatePoint(new Point(), glass);
+                var shortTitle = year.TransformToAncestor(titleLabel).TransformBounds(new Rect(year.RenderSize));
+
+                year.Text = "Ngày kỷ niệm thành lập và phát triển văn hóa truyền thống Việt Nam";
+                UpdateLayout();
+                var longTitle = year.TransformToAncestor(titleLabel).TransformBounds(new Rect(year.RenderSize));
+                return longTitle.Height < shortTitle.Height && longTitle.Right <= titleSize.Width + .1 &&
+                    titleLabel.RenderSize == titleSize && dayCount.TranslatePoint(new Point(), glass) == countPosition &&
+                    holidayScene.TranslatePoint(new Point(), glass) == artworkPosition && holidayScene.RenderSize == artworkSize;
+            }
+            finally
+            {
+                year.Text = original;
+                UpdateLayout();
+            }
+        }
+
         internal int CheckWindowLifecycle()
         {
             if (!IsVisible || !AllowsTransparency || ShowInTaskbar || !tray.Visible ||
                 !tray.Text.StartsWith(ProductName, StringComparison.Ordinal) ||
-                !tray.ContextMenuStrip.Items.Cast<Forms.ToolStripItem>().Any(item => item.Text == "Thoát " + ProductName)) return 21;
+                !trayMenu.MenuItems.Cast<Forms.MenuItem>().Any(item => item.Text == "Thoát " + ProductName)) return 21;
             if (settingsWindow != null || optionsPage != null || music != null || !tick.IsEnabled) return 36;
             if (Math.Abs(ActualWidth - 200) > 1 || Math.Abs(ActualHeight - 250) > 1) return 22;
             if (!CheckCountdownUnits()) return 83;
             config.Glass = 100;
             ApplyGlass();
-            var fill = (DrawingBrush)glass.Background;
-            var baseLayer = (GeometryDrawing)((DrawingGroup)fill.Drawing).Children[0];
-            if (fill.Opacity != 1 || ((LinearGradientBrush)baseLayer.Brush).GradientStops.Any(stop => stop.Color.A != 255)) return 27;
+            var fill = (LinearGradientBrush)glass.Background;
+            if (fill.GradientStops.Any(stop => stop.Color.A != 255)) return 27;
             if (Title != ProductName || dateStatus.Visibility != Visibility.Visible ||
                 year.FontSize != 14 || days.FontSize != 70 || dateStatus.TranslatePoint(new Point(), glass).Y + dateStatus.ActualHeight > 245) return 30;
+            if (!CheckTitleLayout()) return 89;
             SetScale(.8);
             UpdateLayout();
             if (dateStatus.Visibility != Visibility.Collapsed || year.FontSize != 17 || days.FontSize != 87 ||
                 clock.Visibility != Visibility.Visible || clock.TranslatePoint(new Point(), glass).Y + clock.ActualHeight > 250) return 31;
+            if (!CheckTitleLayout()) return 90;
             config.Automatic = false;
             var midnight = new DateTimeOffset(2027, 2, 6, 0, 0, 0, TimeSpan.FromHours(7));
             var reference = new DateTimeOffset(2026, 11, 20, 0, 0, 0, midnight.Offset);
@@ -1095,11 +1126,11 @@ namespace NghiLe
                 greetingText.Text != "Chúc mừng năm mới") return 54;
             config.ApricotNewYear = true;
             ApplyHolidayTheme(displayedTheme);
-            if (weather.Visibility != Visibility.Collapsed || !celebrating ||
+            if (!holidayScene.UsesApricot || !celebrating ||
                 (config.Motion && !holidayScene.IsAnimating)) return 73;
             config.ApricotNewYear = false;
             ApplyHolidayTheme(displayedTheme);
-            if (weather.Visibility != Visibility.Visible) return 74;
+            if (holidayScene.UsesApricot) return 74;
             UpdateClock(midnight.AddSeconds(-2));
             if (time[2].Text != "02" || dayUnit.Text != "NGÀY") return 55;
             config.Automatic = true;
@@ -1108,7 +1139,7 @@ namespace NghiLe
             var newYear = new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.FromHours(7));
             UpdateClock(newYear.AddSeconds(-1));
             if (displayedTheme != HolidayTheme.NewYear || year.Text != "Tết Dương lịch" ||
-                time[2].Text != "01" || weather.IsAnimating || weather.Visibility != Visibility.Collapsed ||
+                time[2].Text != "01" ||
                 !holidayScene.IsAnimating) return 60;
             UpdateClock(newYear.AddDays(1));
             if (displayedTheme != HolidayTheme.HungKings || year.Text != "Giỗ Tổ Hùng Vương" ||
@@ -1160,10 +1191,10 @@ namespace NghiLe
             SetScale(1);
             config.Motion = true;
             UpdateMotion();
-            if (!weather.IsAnimating || !weather.IsDescendantOf(glass)) return 23;
+            if (!holidayScene.IsAnimating || !holidayScene.IsDescendantOf(glass)) return 23;
             config.Motion = false;
             UpdateMotion();
-            if (weather.IsAnimating || !tick.IsEnabled || weather.Visibility != Visibility.Visible) return 35;
+            if (holidayScene.IsAnimating || !tick.IsEnabled || !holidayScene.IsVisible) return 35;
             config.Motion = true;
             UpdateMotion();
             SetScale(.6);
@@ -1172,17 +1203,28 @@ namespace NghiLe
             UpdateLayout();
             settingsWindow.UpdateLayout();
             if (!settingsWindow.IsVisible || settingsWindow.Title != "Cài đặt · " + ProductName ||
-                !weather.IsAnimating || !tick.IsEnabled || optionsPage != null || music != null) return 24;
+                !holidayScene.IsAnimating || !tick.IsEnabled || optionsPage != null || music != null) return 24;
             if (settingsWindow.ActualWidth < settingsWindow.MinWidth) return 38;
             if (Math.Abs(ActualWidth - 120) > 1 || Math.Abs(ActualHeight - 150) > 1) return 56;
             if (widgetPosition != new Point(Left, Top)) return 57;
+            var occurrenceStatus = (TextBlock)LogicalTreeHelper.FindLogicalNode(settingsWindow, "OccurrenceStatus");
+            var occurrenceDate = (TextBlock)LogicalTreeHelper.FindLogicalNode(settingsWindow, "OccurrenceDate");
+            UpdateClock(reference);
+            if (occurrenceStatus.Text != "ĐANG ĐẾM NGƯỢC" || occurrenceDate.Text != "06/02" || !occurrenceDate.IsVisible) return 86;
+            UpdateClock(midnight);
+            if (occurrenceStatus.Text != "ĐANG DIỄN RA" || !occurrenceDate.IsVisible) return 87;
+            config.SelectedHolidays = new string[0];
+            UpdateClock(midnight);
+            if (occurrenceStatus.Text != "CHƯA CHỌN DỊP" || occurrenceDate.IsVisible) return 88;
+            config.SelectedHolidays = new[] { HolidaySetting.LunarNewYear };
+            UpdateClock();
             var optionsTab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "OptionsTab");
             var musicTab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "MusicTab");
             if (optionsTab == null || musicTab == null) return 78;
             musicTab.IsSelected = true;
             settingsWindow.UpdateLayout();
             if (music == null || !music.IsVisible || music.ActualWidth < 200 ||
-                music.ActualHeight > settingsWindow.ActualHeight || !weather.IsAnimating || optionsPage != null) return 34;
+                music.ActualHeight > settingsWindow.ActualHeight || !holidayScene.IsAnimating || optionsPage != null) return 34;
             optionsTab.IsSelected = true;
             settingsWindow.UpdateLayout();
             if (optionsPage == null || !optionsPage.IsVisible || music.IsVisible) return 78;
@@ -1193,35 +1235,38 @@ namespace NghiLe
             {
                 units.SelectedIndex = (int)unit;
                 if (config.CounterMode != unit || displayedTarget != activeTarget ||
-                    !tick.IsEnabled || file.Read().CounterMode != unit || !weather.IsAnimating) return 85;
+                    !tick.IsEnabled || file.Read().CounterMode != unit || !holidayScene.IsAnimating) return 85;
             }
 
             OpenSettings();
             config.Horizontal = true;
             ApplyOrientation();
+            var lastSettings = settingsWindow;
+            var lastPlaylist = playlist;
             settingsWindow.Close();
             UpdateLayout();
-            if (settingsWindow.IsVisible || Math.Abs(ActualWidth - 216) > 1 ||
-                Math.Abs(ActualHeight - 50.4) > 1 || !weather.IsAnimating) return 50;
+            if (settingsWindow != null || music != null || optionsPage != null || playlist != lastPlaylist ||
+                Math.Abs(ActualWidth - 216) > 1 || Math.Abs(ActualHeight - 50.4) > 1 || !holidayScene.IsAnimating) return 50;
             var horizontalScale = WidgetSize.FromDrag(.6, 144, 33.6, true);
             SetScale(horizontalScale);
             UpdateLayout();
             if (Math.Abs(ActualWidth - 360) > 1 || Math.Abs(ActualHeight - 84) > 1 || dateStatus.Visibility != Visibility.Collapsed ||
                 clock.TranslatePoint(new Point(clock.ActualWidth, 0), glass).X > glass.ActualWidth ||
                 days.TranslatePoint(new Point(), glass).X >= clock.TranslatePoint(new Point(), glass).X) return 51;
+            if (!CheckTitleLayout()) return 91;
 
             OpenSettings();
             UpdateLayout();
-            if (!settingsWindow.IsVisible || Math.Abs(ActualWidth - 360) > 1 ||
-                Math.Abs(ActualHeight - 84) > 1 || !tick.IsEnabled || !weather.IsAnimating) return 52;
+            if (!settingsWindow.IsVisible || settingsWindow == lastSettings || Math.Abs(ActualWidth - 360) > 1 ||
+                Math.Abs(ActualHeight - 84) > 1 || !tick.IsEnabled || !holidayScene.IsAnimating) return 52;
             config.Horizontal = false;
             ApplyOrientation();
-            settingsWindow.Hide();
+            settingsWindow.Close();
             if (!tick.IsEnabled) return 37;
             Close();
-            if (IsVisible || tick.IsEnabled || weather.IsAnimating) return 25;
+            if (IsVisible || tick.IsEnabled || holidayScene.IsAnimating) return 25;
             ShowWidget();
-            return IsVisible && tick.IsEnabled && weather.IsAnimating ? 0 : 26;
+            return IsVisible && tick.IsEnabled && holidayScene.IsAnimating ? 0 : 26;
         }
 
         internal void Quit() { quitting = true; Close(); }

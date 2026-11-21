@@ -1,6 +1,6 @@
 # Nghỉ Lễ · Đếm ngược ngày lễ
 
-Nghỉ Lễ là widget nổi cho Windows. Bản portable có giao diện riêng cho chín dịp ở cả hai bố cục đồng hồ, **Dọc** (200 × 250 px) và **Ngang** (360 × 84 px). Đồng hồ và hiệu ứng chạy offline. Hiệu ứng trang trí chạy tối đa 16 khung hình mỗi giây.
+Nghỉ Lễ là widget nổi cho Windows. Bản portable v2 có giao diện riêng cho chín dịp ở cả hai bố cục đồng hồ, **Dọc** (200 × 250 px) và **Ngang** (360 × 84 px). Đồng hồ và hiệu ứng chạy offline. Hiệu ứng chạy tối đa 12 khung hình mỗi giây và dừng khi widget được ẩn.
 
 ## Mở trên Windows
 

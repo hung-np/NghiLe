@@ -2,27 +2,35 @@ using System;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 
 namespace NghiLe
 {
     internal sealed partial class HolidayScene : FrameworkElement
     {
-        private static readonly Lazy<DrawingGroup> NightSky = DeferScene(DrawNightSky);
-        private static readonly Lazy<DrawingGroup> Skyline = DeferScene(DrawSkyline);
-        private static readonly Lazy<DrawingGroup> BronzeDrum = DeferScene(DrawBronzeDrum);
-        private static readonly Point[] BurstCenters = { new Point(47, 24), new Point(93, 18), new Point(104, 36) };
+        private const int FramesPerSecond = 12;
+        private static readonly Lazy<ImageDrawing> NightSky = DeferImage(DrawNightSky);
+        private static readonly Lazy<ImageDrawing> Skyline = DeferImage(DrawSkyline);
+        private static readonly Lazy<ImageDrawing> BronzeDrum = DeferImage(DrawBronzeDrum);
+        private static readonly Point[] BurstCenters =
+        {
+            new Point(47, 23), new Point(93, 18), new Point(106, 37), new Point(26, 37)
+        };
         private static readonly Lazy<DrawingGroup[]> Bursts = new Lazy<DrawingGroup[]>(() => new[]
         {
             DrawScene(d => Burst(d, BurstCenters[0], 23, 22, "#ECF6FF", "#8FAEFF")),
             DrawScene(d => Burst(d, BurstCenters[1], 16, 16, "#FFEEE1", "#B6A6F7")),
-            DrawScene(d => Burst(d, BurstCenters[2], 11, 11, "#D2EAFF", "#8099E6"))
+            DrawScene(d => Burst(d, BurstCenters[2], 12, 11, "#D2EAFF", "#8099E6")),
+            DrawScene(d => Burst(d, BurstCenters[3], 12, 10, "#FFE8B0", "#DB9E96"))
         });
         private static readonly Point DrumCenter = new Point(87, 28);
         private static readonly EllipseGeometry DrumFace = new EllipseGeometry(DrumCenter, 24, 24);
         private static readonly Lazy<Brush> DrumShine = new Lazy<Brush>(CreateDrumShine);
         private static readonly DoubleAnimation PhaseCycle = CreatePhaseCycle();
         private static readonly DependencyProperty PhaseProperty = DependencyProperty.Register(
-            "Phase", typeof(double), typeof(HolidayScene), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+            "Phase", typeof(double), typeof(HolidayScene),
+            new PropertyMetadata(0.0, (target, args) => ((HolidayScene)target).Redraw()));
+        private readonly DrawingVisual artwork = new DrawingVisual();
         private Size artworkSize = Size.Empty;
         private Transform placement = Transform.Identity;
         private HolidayTheme? theme;
@@ -32,7 +40,25 @@ namespace NghiLe
         private bool compact;
         private bool horizontal;
 
-        internal HolidayScene() { IsHitTestVisible = false; }
+        internal HolidayScene()
+        {
+            IsHitTestVisible = false;
+            AddVisualChild(artwork);
+        }
+
+        protected override int VisualChildrenCount { get { return 1; } }
+
+        protected override Visual GetVisualChild(int index)
+        {
+            if (index != 0) throw new ArgumentOutOfRangeException("index");
+            return artwork;
+        }
+
+        protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+        {
+            base.OnRenderSizeChanged(sizeInfo);
+            Redraw();
+        }
 
         private void UpdatePlacement()
         {
@@ -40,7 +66,7 @@ namespace NghiLe
             if (artworkSize == size) return;
             artworkSize = size;
             horizontal = size.Width > size.Height;
-            double scale = horizontal ? 1 : .93;
+            double scale = horizontal ? .88 : .93;
             double x = horizontal ? 0 : (size.Width - 130 * scale) / 2;
             var transform = new MatrixTransform(scale, 0, 0, scale, x, horizontal ? 1 : 0);
             transform.Freeze();
@@ -50,7 +76,7 @@ namespace NghiLe
         private static DoubleAnimation CreatePhaseCycle()
         {
             var cycle = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(8)) { RepeatBehavior = RepeatBehavior.Forever };
-            Timeline.SetDesiredFrameRate(cycle, PeachScene.FramesPerSecond);
+            Timeline.SetDesiredFrameRate(cycle, FramesPerSecond);
             cycle.Freeze();
             return cycle;
         }
@@ -60,23 +86,24 @@ namespace NghiLe
             if (theme == value && apricotNewYear == apricot) return;
             theme = value;
             apricotNewYear = apricot;
-            InvalidateVisual();
+            Redraw();
         }
 
         internal bool IsAnimating { get { return moving && HasAnimatedProperties; } }
+        internal bool UsesApricot { get { return theme == HolidayTheme.LunarNewYear && apricotNewYear; } }
 
         internal void SetCompact(bool value)
         {
             if (compact == value) return;
             compact = value;
-            InvalidateVisual();
+            Redraw();
         }
 
         internal void SetCelebration(bool value)
         {
             if (celebrating == value) return;
             celebrating = value;
-            InvalidateVisual();
+            Redraw();
         }
 
         internal void SetMotion(bool enabled)
@@ -85,12 +112,18 @@ namespace NghiLe
             if (enabled == moving) return;
             moving = enabled;
             BeginAnimation(PhaseProperty, moving ? PhaseCycle : null);
-            InvalidateVisual();
+            Redraw();
         }
 
-        protected override void OnRender(DrawingContext drawing)
+        private void Redraw()
         {
-            if (!theme.HasValue) return;
+            if (RenderSize.Width <= 0 || RenderSize.Height <= 0) return;
+            using (var drawing = artwork.RenderOpen())
+                if (theme.HasValue) RenderArtwork(drawing);
+        }
+
+        private void RenderArtwork(DrawingContext drawing)
+        {
             UpdatePlacement();
             drawing.PushTransform(placement);
             double phase = (double)GetValue(PhaseProperty);
@@ -105,7 +138,7 @@ namespace NghiLe
                         drawing.DrawDrawing(bursts[i]);
                         continue;
                     }
-                    double elapsed = (phase * 8 + 8 - i * 1.65) % 8;
+                    double elapsed = ((phase + 1 - i / (double)bursts.Length) % 1) * 8;
                     if (elapsed >= 3.7) continue;
                     double expansion = Math.Min(1, elapsed / 1.35);
                     double size = 1.10 - .93 * Math.Pow(1 - expansion, 2);
@@ -121,14 +154,14 @@ namespace NghiLe
             else if (theme == HolidayTheme.HungKings)
             {
                 drawing.DrawDrawing(BronzeDrum.Value);
-                if (moving && phase < .68) DrawDrumShine(drawing, phase / .68);
+                if (moving) DrawDrumMotion(drawing, phase);
             }
             else DrawHolidayArtwork(drawing, theme.Value, phase, horizontal);
             drawing.Pop();
             if (!horizontal) DrawVerticalForeground(drawing, theme.Value, phase);
         }
 
-        private static DrawingGroup DrawScene(Action<DrawingContext> draw)
+        internal static DrawingGroup DrawScene(Action<DrawingContext> draw)
         {
             var scene = new DrawingGroup();
             using (var context = scene.Open()) draw(context);
@@ -139,6 +172,26 @@ namespace NghiLe
         private static Lazy<DrawingGroup> DeferScene(Action<DrawingContext> draw)
         {
             return new Lazy<DrawingGroup>(() => DrawScene(draw));
+        }
+
+        private static Lazy<ImageDrawing> DeferImage(Action<DrawingContext> draw)
+        {
+            return new Lazy<ImageDrawing>(() => Rasterize(DrawScene(draw)));
+        }
+
+        internal static ImageDrawing Rasterize(Drawing drawing)
+        {
+            // Reuse finished art at 1.5x while effects animate around it.
+            var bounds = drawing.Bounds;
+            const double dpi = 144;
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(bounds.Width * dpi / 96),
+                (int)Math.Ceiling(bounds.Height * dpi / 96), dpi, dpi, PixelFormats.Pbgra32);
+            var visual = new DrawingVisual { Transform = new TranslateTransform(-bounds.X, -bounds.Y) };
+            using (var context = visual.RenderOpen()) context.DrawDrawing(drawing);
+            bitmap.Render(visual);
+            var image = new ImageDrawing(bitmap, new Rect(bounds.Location, new Size(bitmap.Width, bitmap.Height)));
+            image.Freeze();
+            return image;
         }
 
         private static void DrawNightSky(DrawingContext drawing)
@@ -210,7 +263,7 @@ namespace NghiLe
                 StartPoint = new Point(-12, 15),
                 EndPoint = new Point(12, 33)
             };
-            shine.GradientStops.Insert(1, new GradientStop(PaintColor("#48FFE0A5"), .5));
+            shine.GradientStops.Insert(1, new GradientStop(PaintColor("#A0FFE0A5"), .5));
             shine.Freeze();
             return shine;
         }
@@ -223,6 +276,20 @@ namespace NghiLe
             drawing.DrawRectangle(DrumShine.Value, null, new Rect(63 - x, 4, 48, 48));
             drawing.Pop();
             drawing.Pop();
+        }
+
+        private static void DrawDrumMotion(DrawingContext drawing, double phase)
+        {
+            if (phase < .76) DrawDrumShine(drawing, phase / .76);
+            double angle = phase * 2 * Math.PI;
+            for (int i = 0; i < 5; i++)
+            {
+                double radius = 1.5 - i * .21;
+                var point = Polar(DrumCenter, 21, angle - i * .13);
+                drawing.PushOpacity(1 - i * .18);
+                drawing.DrawEllipse(GoldSpark, null, point, radius, radius);
+                drawing.Pop();
+            }
         }
 
         private static void DrawDrumFace(DrawingContext drawing, Point center)

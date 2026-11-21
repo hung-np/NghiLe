@@ -1,9 +1,11 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -59,13 +61,17 @@ namespace NghiLe
     internal sealed class SettingsWindow : Window
     {
         internal const double DefaultWidth = 650;
-        internal const double DefaultHeight = 660;
+        internal const double DefaultHeight = 700;
         private const double DateWidth = 50;
         private const double LunarWidth = 65;
         private const double RowPadding = 12;
-        private readonly FontFamily serif = new FontFamily("Georgia");
         private readonly TabItem holidaysTab;
         private readonly TextBlock selectedCount;
+        private readonly TextBlock occurrenceStatus;
+        private readonly TextBlock occurrenceName;
+        private readonly TextBlock occurrenceDate;
+        private readonly TextBlock occurrenceYear;
+        private readonly Border occurrenceStamp;
         private readonly Settings settings;
         private readonly Action persist;
         private readonly Brush gold;
@@ -74,7 +80,7 @@ namespace NghiLe
         private readonly ToggleButton springSwitch;
 
         internal SettingsWindow(Window owner, Settings settings, Action saveSelection, Action scheduleSave,
-            Func<FrameworkElement> createOptions, Func<FrameworkElement> createMusic, Action<bool> setSpringStyle)
+            Func<FrameworkElement> createOptions, Func<ResourceDictionary, FrameworkElement> createMusic, Action<bool> setSpringStyle)
         {
             this.settings = settings;
             this.persist = saveSelection;
@@ -85,8 +91,9 @@ namespace NghiLe
             ResizeMode = ResizeMode.CanResize;
             UseLayoutRounding = true;
             FontFamily = new FontFamily("Segoe UI");
-            Background = Paint("#1D1117");
-            Resources.MergedDictionaries.Add(PanelPage.Theme.Value);
+            var theme = PanelPage.LoadTheme();
+            Resources.MergedDictionaries.Add(theme);
+            Background = (Brush)FindResource("PanelCanvas");
             gold = (Brush)FindResource("PanelGold");
             ink = (Brush)FindResource("PanelInk");
             muted = (Brush)FindResource("PanelMuted");
@@ -116,27 +123,27 @@ namespace NghiLe
                 settings.SettingsHeight = Height;
                 scheduleSave();
             };
-            Closing += (s, e) => { e.Cancel = true; Hide(); };
-            PreviewKeyDown += (s, e) =>
+            KeyDown += (s, e) =>
             {
                 if (e.Key != Key.Escape && e.Key != Key.F2) return;
                 e.Handled = true;
-                Hide();
+                Close();
             };
             KeyboardNavigation.SetTabNavigation(this, KeyboardNavigationMode.Cycle);
 
             var shell = new DockPanel();
-            var titleBar = CreateTitleBar("Cài đặt bộ đếm");
-            titleBar.Margin = new Thickness(20, 10, 14, 0);
+            var titleBar = CreateTitleBar();
+            titleBar.Margin = new Thickness(20, 12, 14, 6);
             DockPanel.SetDock(titleBar, Dock.Top);
             shell.Children.Add(titleBar);
-            Content = new Border { Child = shell, BorderBrush = Paint("#63404A"), BorderThickness = new Thickness(1), Background = Background };
+            Content = new Border { Child = shell, BorderBrush = (Brush)FindResource("PanelLine"),
+                BorderThickness = new Thickness(1), Background = Background };
 
             var done = ActionButton("Xong", 100);
             done.Background = gold;
             done.Foreground = (Brush)FindResource("PanelOnGold");
             done.BorderBrush = gold;
-            done.Click += (s, e) => Hide();
+            done.Click += (s, e) => Close();
             var footer = new DockPanel();
             DockPanel.SetDock(done, Dock.Right);
             footer.Children.Add(done);
@@ -151,10 +158,18 @@ namespace NghiLe
             DockPanel.SetDock(footerFrame, Dock.Bottom);
             shell.Children.Add(footerFrame);
 
+            occurrenceStatus = Label("", 11, gold);
+            occurrenceStatus.Name = "OccurrenceStatus";
+            occurrenceStatus.FontWeight = FontWeights.SemiBold;
+            occurrenceName = Label("", 27, ink, Widget.DisplayFont);
+            occurrenceName.Margin = new Thickness(0, 4, 0, 0);
+            occurrenceDate = Label("", 30, ink, Widget.CounterFont);
+            occurrenceDate.Name = "OccurrenceDate";
+            occurrenceYear = Label("", 12, gold, Widget.CounterFont);
+            occurrenceStamp = CreateDateStamp();
+
             var body = new StackPanel();
-            var title = Label("Ngày lễ và sự kiện", 29, ink, serif);
-            title.FontWeight = FontWeights.Bold;
-            body.Children.Add(title);
+            body.Children.Add(CreateCalendarHeader());
             AddGroup(body, "Ngày nghỉ lễ", HolidaySetting.PublicHolidays);
             AddGroup(body, "Ngày kỷ niệm", HolidaySetting.Observances);
 
@@ -170,7 +185,7 @@ namespace NghiLe
             {
                 if (e.Source != tabs) return;
                 if (optionsTab.IsSelected && optionsTab.Content == null) optionsTab.Content = createOptions();
-                if (musicTab.IsSelected && musicTab.Content == null) musicTab.Content = createMusic();
+                if (musicTab.IsSelected && musicTab.Content == null) musicTab.Content = createMusic(theme);
                 selectedCount.Visibility = holidaysTab.IsSelected ? Visibility.Visible : Visibility.Collapsed;
             };
             tabs.SelectedItem = holidaysTab;
@@ -212,24 +227,77 @@ namespace NghiLe
             holidaysTab.Focus();
         }
 
-        private DockPanel CreateTitleBar(string text)
+        private DockPanel CreateTitleBar()
         {
             var bar = new DockPanel();
             var close = ActionButton("×", 32);
             close.Height = 32;
             close.FontSize = 20;
-            close.Background = Paint("#38FFFFFF");
-            close.BorderBrush = Brushes.Transparent;
+            close.Background = (Brush)FindResource("PanelField");
+            close.BorderBrush = (Brush)FindResource("PanelDivider");
             AutomationProperties.SetName(close, "Đóng cài đặt");
-            close.Click += (s, e) => Hide();
+            close.Click += (s, e) => Close();
             DockPanel.SetDock(close, Dock.Right);
             bar.Children.Add(close);
-            var caption = Label(text, 15, gold);
-            caption.VerticalAlignment = VerticalAlignment.Center;
+            var caption = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            caption.Children.Add(new Border { Width = 3, Height = 18, Background = gold, CornerRadius = new CornerRadius(1.5),
+                Margin = new Thickness(0, 0, 9, 0) });
+            var product = Label(Widget.ProductName, 16, ink);
+            product.FontWeight = FontWeights.SemiBold;
+            caption.Children.Add(product);
+            var view = Label("Cài đặt", 13, muted);
+            view.Margin = new Thickness(12, 0, 0, 0);
+            view.VerticalAlignment = VerticalAlignment.Center;
+            caption.Children.Add(view);
             var dragArea = new Border { Child = caption, Background = Brushes.Transparent };
             dragArea.MouseLeftButtonDown += (s, e) => DragMove();
             bar.Children.Add(dragArea);
             return bar;
+        }
+
+        private Border CreateCalendarHeader()
+        {
+            var heading = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            heading.Children.Add(occurrenceStatus);
+            heading.Children.Add(occurrenceName);
+            var body = new DockPanel();
+            DockPanel.SetDock(occurrenceStamp, Dock.Right);
+            body.Children.Add(occurrenceStamp);
+            body.Children.Add(heading);
+            return new Border { Child = body, MinHeight = 96, Padding = new Thickness(16, 9, 10, 9),
+                Background = (Brush)FindResource("PanelField"), BorderBrush = gold,
+                BorderThickness = new Thickness(3, 0, 0, 0), CornerRadius = new CornerRadius(10) };
+        }
+
+        private Border CreateDateStamp()
+        {
+            var date = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            occurrenceDate.TextAlignment = TextAlignment.Center;
+            occurrenceYear.TextAlignment = TextAlignment.Center;
+            occurrenceDate.FontWeight = FontWeights.SemiBold;
+            date.Children.Add(occurrenceDate);
+            date.Children.Add(new System.Windows.Shapes.Rectangle { Width = 59, Height = 1,
+                Stroke = gold, StrokeDashArray = new DoubleCollection { 1, 3 }, Margin = new Thickness(0, 2, 0, 3) });
+            date.Children.Add(occurrenceYear);
+            return new Border { Child = date, Width = 106, MinHeight = 74, Margin = new Thickness(14, 0, 0, 0),
+                BorderBrush = (Brush)FindResource("PanelLine"), BorderThickness = new Thickness(1, 0, 0, 0) };
+        }
+
+        internal void ShowOccurrence(HolidayTheme? theme, DateTimeOffset? date, bool active, string unavailable)
+        {
+            occurrenceStamp.Visibility = date.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            if (!date.HasValue)
+            {
+                bool missingDates = unavailable == "Hết dữ liệu lịch";
+                occurrenceStatus.Text = missingDates ? "HẾT DỮ LIỆU LỊCH" : "CHƯA CHỌN DỊP";
+                occurrenceName.Text = missingDates ? "Chọn một dịp khác để tiếp tục" : "Chọn một dịp để bắt đầu đếm ngược";
+                return;
+            }
+
+            occurrenceStatus.Text = active ? "ĐANG DIỄN RA" : "ĐANG ĐẾM NGƯỢC";
+            occurrenceName.Text = HolidaySetting.All.First(item => item.Theme == theme).Name;
+            occurrenceDate.Text = date.Value.ToString("dd/MM", CultureInfo.InvariantCulture);
+            occurrenceYear.Text = date.Value.ToString("yyyy", CultureInfo.InvariantCulture);
         }
 
         private void UpdateSelectedCount()
@@ -281,13 +349,14 @@ namespace NghiLe
             name.VerticalAlignment = VerticalAlignment.Center;
             name.Margin = new Thickness(0, 0, item.Theme == HolidayTheme.LunarNewYear ? springSwitch.Width + 24 : 10, 0);
             content.Children.Add(name);
-            var date = Label(string.Format("{0:00}/{1:00}", item.Day, item.Month), 14);
+            var date = Label(string.Format("{0:00}/{1:00}", item.Day, item.Month), 14, muted);
+            Typography.SetNumeralAlignment(date, FontNumeralAlignment.Tabular);
             date.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(date, 1);
             content.Children.Add(date);
             if (item.IsLunar)
             {
-                var badge = new Border { Child = Label("Âm lịch", 11, muted), Background = Paint("#337C2337"),
+                var badge = new Border { Child = Label("Âm lịch", 11, muted), Background = (Brush)FindResource("PanelField"),
                     BorderBrush = (Brush)FindResource("PanelLine"), BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(10), HorizontalAlignment = HorizontalAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(7, 2, 7, 2) };
@@ -311,6 +380,5 @@ namespace NghiLe
                 Style = (Style)FindResource("SettingsAction") };
         }
 
-        private static Brush Paint(string value) { return (Brush)new BrushConverter().ConvertFromString(value); }
     }
 }

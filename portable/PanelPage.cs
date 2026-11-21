@@ -1,4 +1,3 @@
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -9,15 +8,15 @@ namespace NghiLe
 {
     internal class PanelPage : Grid
     {
-        internal static readonly Lazy<ResourceDictionary> Theme = new Lazy<ResourceDictionary>(() =>
+        internal static ResourceDictionary LoadTheme()
         {
             using (var stream = typeof(PanelPage).Assembly.GetManifestResourceStream("NghiLe.PanelTheme"))
                 return (ResourceDictionary)XamlReader.Load(stream);
-        });
+        }
 
-        internal PanelPage(string title)
+        internal PanelPage(string title, ResourceDictionary theme)
         {
-            Resources.MergedDictionaries.Add(Theme.Value);
+            Resources.MergedDictionaries.Add(theme);
             TextElement.SetForeground(this, (Brush)FindResource("PanelInk"));
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             UseLayoutRounding = true;
