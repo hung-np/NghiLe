@@ -31,6 +31,7 @@ namespace NghiLe
             "Phase", typeof(double), typeof(HolidayScene),
             new PropertyMetadata(0.0, (target, args) => ((HolidayScene)target).Redraw()));
         private readonly DrawingVisual artwork = new DrawingVisual();
+        private readonly bool preview;
         private Size artworkSize = Size.Empty;
         private Transform placement = Transform.Identity;
         private HolidayTheme? theme;
@@ -40,8 +41,9 @@ namespace NghiLe
         private bool compact;
         private bool horizontal;
 
-        internal HolidayScene()
+        internal HolidayScene(bool preview = false)
         {
+            this.preview = preview;
             IsHitTestVisible = false;
             AddVisualChild(artwork);
         }
@@ -125,8 +127,13 @@ namespace NghiLe
         private void RenderArtwork(DrawingContext drawing)
         {
             UpdatePlacement();
-            drawing.PushTransform(placement);
             double phase = (double)GetValue(PhaseProperty);
+            if (PersonalDate.IsTheme(theme))
+            {
+                DrawPersonalArtwork(drawing, theme == HolidayTheme.Birthday, phase);
+                return;
+            }
+            drawing.PushTransform(placement);
             if (theme == HolidayTheme.NewYear)
             {
                 drawing.DrawDrawing(NightSky.Value);

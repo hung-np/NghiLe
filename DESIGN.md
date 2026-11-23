@@ -13,6 +13,7 @@ colors:
   selected: "#31485D"
   gold: "#F8D48F"
   on-gold: "#2F2318"
+  error: "#FFB5AA"
 typography:
   display:
     fontFamily: "Georgia, Segoe UI"
@@ -39,7 +40,7 @@ components:
 
 Widget nổi dành cho người dùng Windows muốn biết còn bao lâu tới một dịp lễ ở Việt Nam. Giao diện v2 dùng nét dọc như gáy lịch để đánh dấu tên dịp trên mặt đồng hồ và thông tin đếm ngược trong Cài đặt. Đường đục lỗ ngăn số ngày với giờ, phút, giây. Hình minh họa riêng của từng dịp nằm ở đầu mặt đồng hồ.
 
-`portable/PanelTheme.xaml` là nguồn màu và điều khiển dùng chung trong Cài đặt. Màu trong tài liệu phản chiếu các khóa `PanelCanvas`, `PanelField`, `PanelInk`, `PanelMuted`, `PanelLine`, `PanelDivider`, `PanelHot`, `PanelSelected`, `PanelGold` và `PanelOnGold` theo thứ tự khai báo trong tài liệu. `portable/NghiLe.cs` sở hữu bảng màu ngày lễ và phông `Widget.CounterFont` dùng cho bộ đếm và ô ngày tháng. Kích thước trong tài liệu tương ứng với DIP ở WPF.
+`portable/PanelTheme.xaml` là nguồn màu và điều khiển dùng chung trong Cài đặt. Màu trong tài liệu phản chiếu các khóa `PanelCanvas`, `PanelField`, `PanelInk`, `PanelMuted`, `PanelLine`, `PanelDivider`, `PanelHot`, `PanelSelected`, `PanelGold`, `PanelOnGold` và `PanelError` theo thứ tự khai báo trong tài liệu. `portable/NghiLe.cs` sở hữu bảng màu ngày lễ và phông `Widget.CounterFont` dùng cho bộ đếm và ô ngày tháng. Kích thước trong tài liệu tương ứng với DIP ở WPF.
 
 ## Colors
 
@@ -63,10 +64,15 @@ Các ô lớn bo nhẹ theo dáng tờ lịch. Điều khiển dùng góc nhỏ 
 
 ## Components
 
+Trong tab **Thú cưng**, Hắc Long có thêm ô **Xem thử động tác** dùng cùng kiểu ô chọn với **Loại thú cưng**. Ô xem thử phát động tác đã chọn ngay trong hình minh họa và dừng khi rời tab. Hình trên thanh tác vụ phát theo nhịp riêng của từng động tác.
+
 - **Mặt đồng hồ** dùng bốn vị trí số cố định. Tên dịp, đơn vị và ngày tháng đi kèm số đếm. Nút cài đặt, ẩn và đổi kích thước hiện khi con trỏ hoặc tiêu điểm bàn phím tới các điều khiển.
 - **Ô ngày tháng** lấy mốc dương lịch từ đúng bộ đếm. Tiêu đề cho biết dịp đang đếm ngược hay đang diễn ra. Khi thiếu mốc, khu vực này hiển thị cách tiếp tục.
-- **Tab và hàng ngày lễ** dùng điều khiển WPF. Ba tab chia đều bề ngang. Tab đang chọn có nền xanh xám và gạch vàng. Hàng được chọn có dấu tích và nền riêng, còn viền vàng chỉ vị trí bàn phím. Ngày âm lịch có nhãn riêng để phân biệt với mốc dương lịch dùng trong ô ngày tháng.
+- **Tab và hàng ngày lễ** dùng điều khiển WPF. Sáu tab chia đều bề ngang. Tab đang chọn có nền xanh xám và gạch vàng. Hàng được chọn có dấu tích và nền riêng, còn viền vàng chỉ vị trí bàn phím. Ngày âm lịch có nhãn riêng để phân biệt với mốc dương lịch dùng trong ô ngày tháng.
+- **Sắp tới** dùng nét gáy lịch cho các dòng và màu vàng cho dịp đang diễn ra. Tên dịp có thể xuống dòng. Ngày dương lịch và số ngày còn lại nằm bên dưới, cạnh ô chọn mốc nhắc dùng mẫu thả xuống chung.
+- **Thêm ngày** dùng danh sách thả xuống riêng cho ngày và tháng để chọn mốc dương lịch hằng năm. Khung xem trước dùng bảng màu và cảnh như trên widget. Mặt sinh nhật dùng nền tím mận với dây cờ, bánh kem, bóng bay và quà. Số đếm nằm dưới cảnh ở bố cục dọc và bên cạnh cảnh ở bố cục ngang.
 - **Tùy chọn và nhạc** dùng chung kiểu nút, ô nhập và thanh cuộn trong `PanelTheme.xaml`. Danh sách thả xuống dùng mẫu WPF hiện có và bám bề rộng nút mở. Tùy chọn Chuyển động điều khiển hiệu ứng trên mặt đồng hồ.
+- **Thú cưng** dùng ô tùy chọn chung và hình xem trước theo con vật và tỉ lệ đã chọn. Mèo xám xanh có vằn và cuộn tròn khi nghỉ. Chó nâu vàng có tai cụp, vòng cổ và các động tác ngắn khi bật chuyển động. Cửa sổ thú cưng đậu bên ngoài thanh tác vụ, giữ nguyên tiêu điểm ở ứng dụng đang dùng và có thể hiện cùng đồng hồ. Khi được nhấc lên, thú cưng có tư thế riêng và quay mặt theo hướng kéo ngang. Khi thanh tác vụ ẩn, mép màn hình thay cho chỗ đậu và có khoảng hở dành cho thao tác gọi thanh tác vụ lên.
 - **Chuyển động** tập trung vào hình minh họa của từng dịp. `HolidayScene` điều khiển mọi cảnh, kể cả hoa đào, ở tối đa 12 khung hình mỗi giây. Số đếm đổi trực tiếp theo từng giây. Khi tắt Chuyển động hoặc ẩn widget, cảnh dừng.
 
 ## Do's and Don'ts

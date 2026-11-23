@@ -16,8 +16,21 @@ $data = Join-Path $root 'data/tet.csv'
 $hungKings = Join-Path $root 'data/hung-kings.csv'
 $midAutumn = Join-Path $root 'data/mid-autumn.csv'
 $artwork = Join-Path $root 'data/peach.json'
+$birthday = Join-Path $root 'data/birthday.png'
 $theme = Join-Path $PSScriptRoot 'PanelTheme.xaml'
-$sources = 'NghiLe.cs', 'CountdownUnits.cs', 'HolidayCountdown.cs', 'HolidayScene.cs', 'HolidayArtwork.cs', 'PeachScene.cs', 'PanelPage.cs', 'SettingsWindow.cs', 'Music.cs', 'MusicChecks.cs', 'StartupShortcut.cs' | ForEach-Object { Join-Path $PSScriptRoot $_ }
-& (Join-Path $framework 'csc.exe') /nologo /target:winexe /optimize+ /platform:anycpu /codepage:65001 @libs "/win32icon:$icon" "/win32manifest:$manifest" "/resource:$data,NghiLe.Calendar" "/resource:$hungKings,NghiLe.HungKings" "/resource:$midAutumn,NghiLe.MidAutumn" "/resource:$artwork,NghiLe.Peach" "/resource:$theme,NghiLe.PanelTheme" "/out:$output" @sources
+$sources = 'NghiLe.cs', 'CountdownUnits.cs', 'HolidayCountdown.cs', 'HolidayScene.cs', 'HolidayArtwork.cs', 'PeachScene.cs',
+    'PersonalDate.cs', 'PersonalDateArtwork.cs', 'PersonalDatesPage.cs', 'PanelPage.cs', 'SettingsWindow.cs',
+    'OccasionReminders.cs', 'UpcomingPage.cs',
+    'PetArtwork.cs', 'TaskbarPet.cs', 'DragonClip.cs',
+    'Music.cs', 'MusicChecks.cs', 'StartupShortcut.cs' | ForEach-Object { Join-Path $PSScriptRoot $_ }
+$resources = "/resource:$data,NghiLe.Calendar", "/resource:$hungKings,NghiLe.HungKings", "/resource:$midAutumn,NghiLe.MidAutumn",
+    "/resource:$artwork,NghiLe.Peach", "/resource:$birthday,NghiLe.Birthday", "/resource:$theme,NghiLe.PanelTheme"
+$dragonClips = '01-dung-tho', '11-bay-tai-cho', '12-ngu-cuon-minh', '13-gam', '14-dung-day',
+    '15-nhay-cat-canh', '16-vo-canh-cat-canh', '17-dap-xuong', '18-u-ru-roi-ngu'
+$resources += $dragonClips | ForEach-Object {
+    $sheet = Get-Item -LiteralPath (Join-Path $root "data/hac-long/$_.png")
+    "/resource:$($sheet.FullName),NghiLe.HacLong.$_"
+}
+& (Join-Path $framework 'csc.exe') /nologo /target:winexe /optimize+ /platform:anycpu /codepage:65001 @libs @resources "/win32icon:$icon" "/win32manifest:$manifest" "/out:$output" @sources
 if ($LASTEXITCODE -ne 0) { throw 'Portable build failed.' }
 Get-Item -LiteralPath $output | Select-Object Name, Length

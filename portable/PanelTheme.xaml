@@ -10,6 +10,32 @@
   <SolidColorBrush x:Key="PanelSelected" Color="#31485D" />
   <SolidColorBrush x:Key="PanelGold" Color="#F8D48F" />
   <SolidColorBrush x:Key="PanelOnGold" Color="#2F2318" />
+  <SolidColorBrush x:Key="PanelError" Color="#FFB5AA" />
+
+  <Style x:Key="SettingsTextInput" TargetType="{x:Type TextBox}">
+    <Setter Property="Foreground" Value="{StaticResource PanelInk}" />
+    <Setter Property="Background" Value="{StaticResource PanelField}" />
+    <Setter Property="BorderBrush" Value="{StaticResource PanelLine}" />
+    <Setter Property="CaretBrush" Value="{StaticResource PanelInk}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type TextBox}">
+          <Border x:Name="InputFrame" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="1" CornerRadius="5" Padding="7,5">
+            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+              <Setter TargetName="InputFrame" Property="BorderBrush" Value="{StaticResource PanelGold}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="InputFrame" Property="Opacity" Value=".55" /></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 
   <Style TargetType="{x:Type Button}">
     <Setter Property="Foreground" Value="{StaticResource PanelInk}" />
@@ -133,7 +159,7 @@
         <ControlTemplate TargetType="{x:Type TabItem}">
           <Grid Height="35" Background="Transparent">
             <Border x:Name="TabFocus" Margin="1,0" BorderThickness="1" BorderBrush="Transparent" CornerRadius="5" />
-            <ContentPresenter ContentSource="Header" Margin="16,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <ContentPresenter ContentSource="Header" Margin="4,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
             <Border x:Name="CurrentTab" Height="2" Margin="14,0,14,2" VerticalAlignment="Bottom" CornerRadius="1"
                     Background="{StaticResource PanelGold}" Visibility="Hidden" />
           </Grid>

@@ -6,13 +6,37 @@ Nghỉ Lễ là widget nổi cho Windows. Bản portable v2 có giao diện riê
 
 1. Bấm đúp `NghiLe.exe` trong thư mục này. Bản portable dùng WPF và .NET Framework có sẵn trên máy kiểm tra. Bạn có thể chạy từ Downloads.
 2. Kéo mặt đồng hồ để di chuyển. Rê chuột lên widget và kéo **↘** ở góc dưới bên phải để đổi kích thước theo tỉ lệ của bố cục hiện tại. Ở bố cục dọc từ **160 × 200 px** trở xuống, widget ẩn dòng ngày và múi giờ rồi tăng cỡ tên năm và số ngày. Khi tay nắm nhận tiêu điểm, các phím mũi tên chỉnh kích thước từng bước. **F2** mở cài đặt và **Esc** quay về đồng hồ.
-3. **Cài đặt** mở trong cửa sổ riêng có thể kéo giãn. Ba tab **Ngày lễ**, **Tùy chọn** và **Nhạc** nằm ở đầu cửa sổ. Tab **Ngày lễ** liệt kê bảy ngày nghỉ lễ và hai ngày kỷ niệm, với ô chọn bên trái và ngày tháng bên phải. Khi dùng lần đầu, **Tết Nguyên đán** được tích sẵn. Bộ đếm chọn dịp gần nhất trong các dịp bạn tích. Trong **Tùy chọn → Hiển thị**, có thể đổi bố cục **Dọc** hoặc **Ngang**, **Luôn nổi**, **Chuyển động** và **Độ đậm kính**. Bấm **Xong** để quay về đồng hồ.
+3. **Cài đặt** mở trong cửa sổ riêng có thể kéo giãn. Sáu tab **Ngày lễ**, **Sắp tới**, **Thêm ngày**, **Tùy chọn**, **Thú cưng** và **Nhạc** nằm ở đầu cửa sổ. Tab **Ngày lễ** liệt kê bảy ngày nghỉ lễ và hai ngày kỷ niệm, với ô chọn bên trái và ngày tháng bên phải. Khi dùng lần đầu, **Tết Nguyên đán** được tích sẵn. Bộ đếm chọn dịp gần nhất trong các dịp bạn theo dõi. Trong **Tùy chọn → Hiển thị**, có thể đổi bố cục **Dọc** hoặc **Ngang**, **Luôn nổi**, **Chuyển động** và **Độ đậm kính**. Bấm **Xong** để quay về đồng hồ.
 4. Nút × ẩn cửa sổ. Bấm biểu tượng hoa ở khay hệ thống, xem thêm trong dấu mũi tên ^ nếu cần, hoặc mở lại `NghiLe.exe` để hiện widget. Bấm phải vào biểu tượng và chọn **Thoát Nghỉ Lễ** để dừng ứng dụng.
 5. Để Nghỉ Lễ tự mở lúc đăng nhập, bật **Mở cùng Windows** trong **Tùy chọn → Khởi động**. Công tắc mặc định tắt trên máy mới và chỉ áp dụng cho tài khoản Windows đang dùng. Khi nâng cấp từ Hẹn Tết hoặc Nhịp Ngày, thoát phiên bản cũ rồi mở `NghiLe.exe` từ cùng thư mục. Mục khởi động do bản cũ tạo trong thư mục đó sẽ trỏ sang tệp mới. Nếu chuyển ứng dụng sang thư mục khác, mở tệp ở vị trí mới rồi bật công tắc lại.
 
 Ứng dụng tiếp tục dùng `%LOCALAPPDATA%\HenTet\settings.json` sau khi đổi tên. Tệp này lưu đơn vị hiển thị bộ đếm, vị trí, kích thước, bố cục, các dịp đã chọn, chế độ luôn nổi, hiệu ứng và độ đậm kính. Nếu tệp chưa có, ứng dụng vẫn đọc tùy chọn từ `%LOCALAPPDATA%\Nocturne\settings.json` để giữ vị trí và kích thước của bản cũ hơn.
 
 Dùng công tắc **Đào / Mai** trên dòng **Tết Nguyên đán** trong tab **Ngày lễ** để đổi giữa **Cành đào và bánh chưng** và **Cành mai và bánh tét**. Lựa chọn được lưu và áp dụng cho cả màn đếm ngược lẫn lời chúc năm mới.
+
+## Ngày cá nhân
+
+Mở **Cài đặt → Thêm ngày**, chọn **Sinh nhật** hoặc **Ngày đặc biệt**, chọn ngày và tháng dương lịch rồi bấm **Thêm ngày**. Bạn có thể đặt tên hiển thị, sửa ngày đã lưu hoặc bỏ chọn để tạm dừng theo dõi. Ngày cá nhân tự lặp lại. Riêng ngày 29/02 đếm đến lần xuất hiện tiếp theo trong năm nhuận.
+
+Widget ưu tiên lời chúc ngày cá nhân khi đến đúng ngày theo giờ Việt Nam. Giao diện sinh nhật có ánh nến lung linh, sao nhấp nháy và hoa giấy rơi. Tùy chọn **Chuyển động** áp dụng cho widget và khung xem trước trong tab **Thêm ngày**.
+
+## Dịp sắp tới và nhắc ngày
+
+Bấm **Sắp tới** trên widget, nhấn **F3**, hoặc chọn **Dịp sắp tới** từ biểu tượng ở khay hệ thống. Danh sách xếp các dịp đang theo dõi theo thứ tự ngày, kèm ngày dương lịch và số ngày còn lại. Dịp đã bắt đầu vẫn hiện trong thời gian diễn ra.
+
+Trên mỗi dòng, chọn **Trước 7 ngày**, **Trước 1 ngày**, **Đúng ngày** hoặc **Không nhắc**. Mặc định các dịp đều tắt nhắc. Nghỉ Lễ gửi thông báo Windows từ **9:00 giờ Việt Nam** vào ngày nhắc khi ứng dụng đang chạy, kể cả lúc widget ẩn. Nếu bạn mở ứng dụng sau 9:00 trong ngày đó, thông báo sẽ xuất hiện khi mở. Bấm thông báo để xem danh sách.
+
+## Chế độ thú cưng
+
+Mở **Cài đặt → Thú cưng** và bật chế độ. Bạn có thể chọn **Mèo**, **Chó** hoặc **Hắc Long**, thời gian chờ **1, 5 hoặc 15 phút**, vị trí gần đầu hoặc cuối thanh tác vụ chính, và chuyển động **Thỉnh thoảng** hoặc **Ở yên**. Thanh **Kích thước thú cưng** chỉnh từ **50% đến 200%** và cập nhật hình xem trước. Với chế độ **Thỉnh thoảng**, chó xen kẽ đi bộ với vẫy đuôi, đánh hơi, vươn vai, nhảy và nằm ngủ.
+
+Khi chọn **Hắc Long**, bật **Chuyển động** trong **Tùy chọn** và chọn **Thỉnh thoảng** để xem chu kỳ tự động. Rồng ngủ cuộn mình 32 giây, đứng dậy, nhảy lên, vỗ cánh rồi bay một vòng rộng khoảng 250 px. Rồng quay về đúng chỗ đậu, đáp xuống, ủ rũ rồi cuộn mình ngủ tiếp. Đường bay thu ngắn khi sát mép và thiếu chỗ. Ở chế độ **Ở yên**, rồng nằm ngủ. Trong **Xem thử động tác**, bạn có thể xem từng bước của chu kỳ, cùng động tác đứng thở và ngẩng đầu gầm.
+
+Chọn **Hiện cả hai** trong Cài đặt hoặc ở khay hệ thống để giữ đồng hồ cùng thú cưng trên màn hình. **Hiện thú cưng ngay** chuyển sang chỉ hiện thú cưng. Khi chỉ hiện đồng hồ, thời gian chờ được tính từ lần cuối bạn thao tác với đồng hồ hoặc từ lúc đóng Cài đặt.
+
+Thú cưng chạy và đậu ngay phía trên thanh tác vụ. Bấm giữ thân thú cưng để nhấc lên. Chó và mèo co chân, quẫy nhẹ, quay mặt theo hướng kéo và giữ hướng đó khi đáp xuống vị trí mới. Khi Windows tự ẩn thanh tác vụ, thú cưng đậu gần mép màn hình và chừa lối để gọi thanh tác vụ lên. Khi thanh tác vụ hiện lại, thú cưng trở về mép trên. Thú cưng tạm ẩn khi có ứng dụng toàn màn hình.
+
+Nhắc ngày vẫn chạy. Bấm biểu tượng Nghỉ Lễ ở khay hệ thống để mở lại đồng hồ, hoặc chọn **Ẩn khỏi màn hình** để ẩn cả đồng hồ lẫn thú cưng.
 
 ## Phát nhạc
 

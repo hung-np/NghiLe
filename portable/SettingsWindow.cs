@@ -66,6 +66,8 @@ namespace NghiLe
         private const double LunarWidth = 65;
         private const double RowPadding = 12;
         private readonly TabItem holidaysTab;
+        private readonly TabItem upcomingTab;
+        private UpcomingPage upcomingPage;
         private readonly TextBlock selectedCount;
         private readonly TextBlock occurrenceStatus;
         private readonly TextBlock occurrenceName;
@@ -80,7 +82,9 @@ namespace NghiLe
         private readonly ToggleButton springSwitch;
 
         internal SettingsWindow(Window owner, Settings settings, Action saveSelection, Action scheduleSave,
-            Func<FrameworkElement> createOptions, Func<ResourceDictionary, FrameworkElement> createMusic, Action<bool> setSpringStyle)
+            Func<FrameworkElement> createOptions, Func<FrameworkElement> createPet, Func<ResourceDictionary, FrameworkElement> createMusic,
+            Action<bool> setSpringStyle, Func<PersonalDate[], bool> savePersonalDates,
+            Func<string, int, bool> saveReminder)
         {
             this.settings = settings;
             this.persist = saveSelection;
@@ -176,15 +180,33 @@ namespace NghiLe
             var tabs = new TabControl { Style = (Style)FindResource("SettingsTabs") };
             var tabStyle = (Style)FindResource("SettingsTab");
             holidaysTab = new TabItem { Header = "Ngày lễ", Style = tabStyle, Content = PanelPage.Scroll(body) };
+            upcomingTab = new TabItem { Name = "UpcomingTab", Header = "Sắp tới", Style = tabStyle };
+            var personalDatesTab = new TabItem { Name = "PersonalDatesTab", Header = "Thêm ngày", Style = tabStyle };
             var optionsTab = new TabItem { Name = "OptionsTab", Header = "Tùy chọn", Style = tabStyle };
+            var petTab = new TabItem { Name = "PetTab", Header = "Thú cưng", Style = tabStyle };
             var musicTab = new TabItem { Name = "MusicTab", Header = "Nhạc", Style = tabStyle };
             tabs.Items.Add(holidaysTab);
+            tabs.Items.Add(upcomingTab);
+            tabs.Items.Add(personalDatesTab);
             tabs.Items.Add(optionsTab);
+            tabs.Items.Add(petTab);
             tabs.Items.Add(musicTab);
             tabs.SelectionChanged += (s, e) =>
             {
                 if (e.Source != tabs) return;
+                if (upcomingTab.IsSelected)
+                {
+                    if (upcomingPage == null)
+                    {
+                        upcomingPage = new UpcomingPage(settings, theme, saveReminder, () => Open(false));
+                        upcomingTab.Content = PanelPage.Scroll(upcomingPage);
+                    }
+                    upcomingPage.Refresh(DateTimeOffset.UtcNow.ToOffset(HolidayCountdown.VietnamOffset));
+                }
+                if (personalDatesTab.IsSelected && personalDatesTab.Content == null)
+                    personalDatesTab.Content = PanelPage.Scroll(new PersonalDatesPage(settings, theme, savePersonalDates));
                 if (optionsTab.IsSelected && optionsTab.Content == null) optionsTab.Content = createOptions();
+                if (petTab.IsSelected && petTab.Content == null) petTab.Content = createPet();
                 if (musicTab.IsSelected && musicTab.Content == null) musicTab.Content = createMusic(theme);
                 selectedCount.Visibility = holidaysTab.IsSelected ? Visibility.Visible : Visibility.Collapsed;
             };
@@ -213,10 +235,11 @@ namespace NghiLe
             return Math.Max(min, Math.Min(max, double.IsNaN(value) || value <= 0 ? fallback : value));
         }
 
-        internal void OpenHolidays()
+        internal void Open(bool upcoming)
         {
             springSwitch.IsChecked = settings.ApricotNewYear;
-            holidaysTab.IsSelected = true;
+            var tab = upcoming ? upcomingTab : holidaysTab;
+            tab.IsSelected = true;
             if (!IsVisible)
             {
                 SizeToMonitor();
@@ -224,7 +247,13 @@ namespace NghiLe
             }
             if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
             Activate();
-            holidaysTab.Focus();
+            tab.Focus();
+        }
+
+        internal void RefreshUpcoming(DateTimeOffset local)
+        {
+            if (upcomingPage != null && upcomingTab.IsSelected && upcomingPage.LocalDay != local.Date)
+                upcomingPage.Refresh(local);
         }
 
         private DockPanel CreateTitleBar()
@@ -283,7 +312,7 @@ namespace NghiLe
                 BorderBrush = (Brush)FindResource("PanelLine"), BorderThickness = new Thickness(1, 0, 0, 0) };
         }
 
-        internal void ShowOccurrence(HolidayTheme? theme, DateTimeOffset? date, bool active, string unavailable)
+        internal void ShowOccurrence(string name, DateTimeOffset? date, bool active, string unavailable)
         {
             occurrenceStamp.Visibility = date.HasValue ? Visibility.Visible : Visibility.Collapsed;
             if (!date.HasValue)
@@ -295,7 +324,7 @@ namespace NghiLe
             }
 
             occurrenceStatus.Text = active ? "ĐANG DIỄN RA" : "ĐANG ĐẾM NGƯỢC";
-            occurrenceName.Text = HolidaySetting.All.First(item => item.Theme == theme).Name;
+            occurrenceName.Text = name;
             occurrenceDate.Text = date.Value.ToString("dd/MM", CultureInfo.InvariantCulture);
             occurrenceYear.Text = date.Value.ToString("yyyy", CultureInfo.InvariantCulture);
         }

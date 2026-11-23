@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -40,6 +41,15 @@ namespace NghiLe
         public double? X { get; set; }
         public double? Y { get; set; }
         public string[] SelectedHolidays { get; set; }
+        public PersonalDate[] PersonalDates { get; set; }
+        public Dictionary<string, int> ReminderDays { get; set; }
+        public string[] DeliveredReminders { get; set; }
+        public bool PetEnabled { get; set; }
+        public PetAnimal PetAnimal { get; set; }
+        public int PetDelayMinutes { get; set; }
+        public bool PetRoams { get; set; }
+        public bool PetAtEnd { get; set; }
+        public int PetSizePercent { get; set; }
         public double SettingsWidth { get; set; }
         public double SettingsHeight { get; set; }
 
@@ -53,6 +63,12 @@ namespace NghiLe
             Glass = 57;
             Scale = 1;
             SelectedHolidays = new[] { HolidaySetting.LunarNewYear };
+            PersonalDates = new PersonalDate[0];
+            ReminderDays = new Dictionary<string, int>(StringComparer.Ordinal);
+            DeliveredReminders = new string[0];
+            PetDelayMinutes = TaskbarPet.DefaultDelay;
+            PetRoams = true;
+            PetSizePercent = TaskbarPet.DefaultSizePercent;
             SettingsWidth = SettingsWindow.DefaultWidth;
             SettingsHeight = SettingsWindow.DefaultHeight;
         }
@@ -110,7 +126,7 @@ namespace NghiLe
 
     internal sealed class SettingsFile
     {
-        private const int SettingsVersion = 4;
+        private const int SettingsVersion = 7;
         private readonly string path;
         private readonly string legacyPath;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -132,6 +148,17 @@ namespace NghiLe
                 s.Glass = s.Version < 2 && s.Glass == 88 ? 100 : Math.Max(42, Math.Min(100, s.Glass));
                 s.Scale = WidgetSize.Clamp(s.Scale);
                 if (s.SelectedHolidays == null) s.SelectedHolidays = new[] { HolidaySetting.LunarNewYear };
+                s.PersonalDates = PersonalDate.Normalize(s.PersonalDates);
+                var reminderIds = new HashSet<string>(HolidaySetting.All.Select(item => item.Id)
+                    .Concat(s.PersonalDates.Select(item => item.Id.ToString("N"))), StringComparer.Ordinal);
+                s.ReminderDays = (s.ReminderDays ?? new Dictionary<string, int>())
+                    .Where(item => reminderIds.Contains(item.Key) && item.Value != OccasionReminders.Off &&
+                        OccasionReminders.Choices.Contains(item.Value))
+                    .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+                s.DeliveredReminders = (s.DeliveredReminders ?? new string[0]).Where(key => !string.IsNullOrEmpty(key)).ToArray();
+                if (!Enum.IsDefined(typeof(PetAnimal), s.PetAnimal)) s.PetAnimal = PetAnimal.Cat;
+                s.PetDelayMinutes = TaskbarPet.NormalizeDelay(s.PetDelayMinutes);
+                s.PetSizePercent = TaskbarPet.NormalizeSize(s.PetSizePercent);
                 if (s.Version < 3 && s.SettingsWidth == 680 && s.SettingsHeight == 680)
                 {
                     s.SettingsWidth = SettingsWindow.DefaultWidth;
@@ -198,6 +225,7 @@ namespace NghiLe
         private Point resizeStart;
         private double resizeScale;
         private bool resizing;
+        private bool movingWindow;
         private readonly TextBlock year = Label("", 14, false);
         private readonly DockPanel titleLabel = new DockPanel();
         private readonly Border titleMark = new Border { Width = 2, Height = 12, CornerRadius = new CornerRadius(1),
@@ -209,9 +237,14 @@ namespace NghiLe
         private readonly TextBlock[] time = { Label("", 24, true), Label("", 24, true), Label("", 24, true) };
         private readonly TextBlock[] clockUnits = new TextBlock[3];
         private readonly DispatcherTimer tick = new DispatcherTimer();
+        private readonly DispatcherTimer reminderTick = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        private readonly DispatcherTimer petDelay = new DispatcherTimer(DispatcherPriority.Background);
         private readonly DispatcherTimer save = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         private readonly Forms.NotifyIcon tray;
         private readonly Forms.ContextMenu trayMenu;
+        private readonly Forms.MenuItem showPetItem;
+        private readonly Forms.MenuItem showBothItem;
+        private TaskbarPet pet;
         private readonly Drawing.Icon icon;
         private bool quitting;
         private bool ready;
@@ -220,11 +253,13 @@ namespace NghiLe
         private CountdownUnit? displayedUnit;
         private long displayedExtraDays;
         private HolidayTheme? displayedTheme;
+        private string displayedName;
         private bool celebrating;
         private string unavailableStatus;
         private long displayedSeconds = long.MinValue;
         private DateTime holidayLookupDate;
         private string[] holidayLookupSelection;
+        private PersonalDate[] holidayLookupPersonalDates;
         private int holidayLookupFixedYear;
         private HolidayOccurrence? holidayLookupResult;
 
@@ -254,33 +289,49 @@ namespace NghiLe
             tray = new Forms.NotifyIcon { Icon = icon, Text = ProductName + " · Đếm ngược ngày lễ", Visible = true };
             trayMenu = new Forms.ContextMenu();
             trayMenu.MenuItems.Add("Mở widget", (s, e) => ShowWidget());
-            trayMenu.MenuItems.Add("Ẩn widget", (s, e) => Hide());
+            trayMenu.MenuItems.Add("Ẩn khỏi màn hình", (s, e) => HideWidget());
+            showPetItem = trayMenu.MenuItems.Add("Hiện thú cưng ngay", (s, e) => ShowPet(false));
+            showBothItem = trayMenu.MenuItems.Add("Hiện cả hai", (s, e) => ShowPet(true));
+            showPetItem.Enabled = config.PetEnabled;
+            showBothItem.Enabled = config.PetEnabled;
+            trayMenu.MenuItems.Add("Dịp sắp tới", (s, e) => OpenUpcoming());
             trayMenu.MenuItems.Add("Cài đặt", (s, e) => { if (!IsVisible) ShowWidget(); OpenSettings(); });
             trayMenu.MenuItems.Add("Thoát " + ProductName, (s, e) => Quit());
             tray.ContextMenu = trayMenu;
             tray.MouseClick += (s, e) => { if (e.Button == Forms.MouseButtons.Left) ShowWidget(); };
+            tray.BalloonTipClicked += (s, e) => OpenUpcoming();
 
             PreviewMouseLeftButtonDown += (s, e) =>
             {
                 if (InControl(e.OriginalSource as DependencyObject)) return;
-                DragMove();
+                movingWindow = true;
+                try { DragMove(); }
+                finally { movingWindow = false; }
                 ScheduleSave();
+                ResetPetDelay();
             };
+            PreviewMouseDown += (s, e) => ResetPetDelay();
+            PreviewMouseWheel += (s, e) => ResetPetDelay();
+            PreviewKeyDown += (s, e) => ResetPetDelay();
             MouseEnter += (s, e) => UpdateControls();
             MouseLeave += (s, e) => UpdateControls();
             KeyDown += (s, e) =>
             {
                 if (e.Key == Key.F2) OpenSettings();
+                if (e.Key == Key.F3) OpenUpcoming();
             };
             LocationChanged += (s, e) => { if (ready) ScheduleSave(); };
-            Loaded += (s, e) => { PlaceOnScreen(); ready = true; Persist(); };
+            Loaded += (s, e) => { PlaceOnScreen(); ready = true; Persist(); UpdateReminderTimer(); ResetPetDelay(); };
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
             Microsoft.Win32.SystemEvents.TimeChanged += OnTimeChanged;
             tick.Tick += (s, e) => TickClock();
+            reminderTick.Tick += (s, e) => CheckReminders();
+            petDelay.Tick += (s, e) => EnterPetModeAfterDelay();
             save.Tick += (s, e) => Persist();
             IsVisibleChanged += (s, e) =>
             {
                 UpdateClockTimer();
+                ResetPetDelay();
                 if (!IsVisible && !quitting)
                 {
                     if (settingsWindow != null) settingsWindow.Close();
@@ -291,13 +342,14 @@ namespace NghiLe
             Closing += (s, e) =>
             {
                 if (quitting) Persist();
-                else { e.Cancel = true; Hide(); }
+                else { e.Cancel = true; HideWidget(); }
             };
             Closed += (s, e) =>
             {
                 Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
                 Microsoft.Win32.SystemEvents.TimeChanged -= OnTimeChanged;
-                tick.Stop(); save.Stop();
+                tick.Stop(); reminderTick.Stop(); petDelay.Stop(); save.Stop();
+                if (pet != null) { pet.Stop(); pet.Close(); }
                 if (music != null) music.Dispose();
                 if (playlist != null) playlist.Dispose();
                 tray.Dispose(); trayMenu.Dispose(); icon.Dispose();
@@ -306,7 +358,52 @@ namespace NghiLe
             UpdateClock();
         }
 
-        internal void ShowWidget() { Show(); PlaceOnScreen(); Activate(); }
+        internal void ShowWidget()
+        {
+            if (pet != null) pet.Stop();
+            Show();
+            PlaceOnScreen();
+            Activate();
+            ResetPetDelay();
+        }
+
+        private void HideWidget()
+        {
+            petDelay.Stop();
+            if (pet != null) pet.Stop();
+            Hide();
+        }
+
+        private void ShowPet(bool keepClock)
+        {
+            if (quitting || !config.PetEnabled) return;
+            if (pet == null) pet = new TaskbarPet(config);
+            if (keepClock)
+            {
+                if (!IsVisible) { Show(); PlaceOnScreen(); }
+                if (settingsWindow != null) settingsWindow.Close();
+            }
+            else Hide();
+            pet.Start();
+            ResetPetDelay();
+        }
+
+        private void ResetPetDelay()
+        {
+            petDelay.Stop();
+            if (quitting || !ready || !IsVisible || settingsWindow != null || !config.PetEnabled ||
+                (pet != null && pet.IsRunning)) return;
+            petDelay.Interval = TimeSpan.FromMinutes(config.PetDelayMinutes);
+            petDelay.Start();
+        }
+
+        private void EnterPetModeAfterDelay()
+        {
+            petDelay.Stop();
+            if (!IsVisible || settingsWindow != null) return;
+            if (movingWindow || resizing || IsMouseCaptureWithin) ResetPetDelay();
+            else ShowPet(false);
+        }
 
         private void OnDisplaySettingsChanged(object sender, EventArgs args)
         {
@@ -315,7 +412,12 @@ namespace NghiLe
 
         private void OnTimeChanged(object sender, EventArgs args)
         {
-            Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) UpdateClock(); }));
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (quitting) return;
+                if (IsVisible) UpdateClock();
+                CheckReminders();
+            }));
         }
 
         private void PlaceOnScreen(bool preservePosition = false)
@@ -350,7 +452,7 @@ namespace NghiLe
         }
 
         private void ScheduleSave() { save.Stop(); save.Start(); }
-        private void Persist()
+        private bool Persist()
         {
             save.Stop();
             if (ready)
@@ -359,7 +461,7 @@ namespace NghiLe
                 config.X = Left + Width - size.Width * config.Scale;
                 config.Y = Top + Height - size.Height * config.Scale;
             }
-            file.Save(config);
+            return file.Save(config);
         }
 
         private void SetScale(double scale)
@@ -435,6 +537,8 @@ namespace NghiLe
                 case HolidayTheme.VietnamCultureDay: return new HolidayPalette("#2C625C", "#224B4B", "#162D33", "#FFF2D2", "#F1C98B");
                 case HolidayTheme.MidAutumn: return new HolidayPalette("#524269", "#342B51", "#27223F", "#FFF1CB", "#F6BD8B");
                 case HolidayTheme.Christmas: return new HolidayPalette("#346352", "#244841", "#172E2C", "#FFF5DE", "#EBC58B");
+                case HolidayTheme.Birthday: return new HolidayPalette("#582D4D", "#3D2038", "#221322", "#FFF1DF", "#FFDC96");
+                case HolidayTheme.PersonalDay: return new HolidayPalette("#44385F", "#332747", "#221A31", "#FFF2E8", "#F6D297");
                 default: return new HolidayPalette("#344758", "#233549", "#192739", "#F6F2E5", "#EBD5AD");
             }
         }
@@ -448,6 +552,11 @@ namespace NghiLe
             brush.GradientStops.Insert(1, new GradientStop(Tint(palette.Middle, .58 + .42 * glass), horizontal ? .32 : .29));
             brush.Freeze();
             return brush;
+        }
+
+        internal static Brush HolidayGlassPaint(HolidayTheme theme)
+        {
+            return HolidayGlassPaint(Palette(theme), false, 1);
         }
 
         private static Color Tint(string value, double opacity)
@@ -534,6 +643,7 @@ namespace NghiLe
             surface.Children.Add(face);
             greetingText.TextWrapping = TextWrapping.Wrap;
             greetingDetail.Margin = new Thickness(0, 5, 0, 0);
+            greetingDetail.TextTrimming = TextTrimming.CharacterEllipsis;
             greeting.Children.Add(greetingText);
             greeting.Children.Add(greetingDetail);
             surface.Children.Add(greeting);
@@ -571,14 +681,11 @@ namespace NghiLe
 
             titleLabel.VerticalAlignment = horizontal ? VerticalAlignment.Bottom : VerticalAlignment.Center;
             titleLabel.Margin = horizontal ? new Thickness(8, 0, 4, 5) : new Thickness(0, 0, 0, 4);
-            dayCount.Margin = horizontal ? new Thickness(2, 0, 2, 0) : new Thickness(2, 1, 2, 6);
             divider.Width = horizontal ? 52 : 162;
-            divider.Height = 11;
             divider.HorizontalAlignment = HorizontalAlignment.Center;
             divider.VerticalAlignment = VerticalAlignment.Center;
             divider.LayoutTransform = horizontal ? new RotateTransform(90) : Transform.Identity;
             clock.VerticalAlignment = VerticalAlignment.Center;
-            foreach (var number in time) number.FontSize = horizontal ? 23 : 25;
             ApplyFaceTypography(!horizontal && config.Scale <= WidgetSize.CompactScale);
             if (ready) ResizeWidget(true);
         }
@@ -588,10 +695,13 @@ namespace NghiLe
             compact = useCompact;
             holidayScene.SetCompact(useCompact);
             bool horizontal = config.Horizontal;
+            bool personal = PersonalDate.IsTheme(displayedTheme);
+            bool personalVertical = personal && !horizontal;
             face.VerticalAlignment = horizontal ? VerticalAlignment.Stretch : VerticalAlignment.Top;
-            face.Margin = horizontal ? new Thickness(0, 0, 14, 0) : new Thickness(15, compact ? 44 : 51, 15, 0);
-            titleLabel.Height = horizontal ? 17 : compact ? 23 : 19;
-            year.FontSize = horizontal ? 12 : compact ? 17 : 14;
+            double artworkHeight = personal ? (compact ? 82 : 92) : (compact ? 44 : 51);
+            face.Margin = horizontal ? new Thickness(0, 0, 14, 0) : new Thickness(15, artworkHeight, 15, 0);
+            titleLabel.Height = horizontal || personalVertical ? 17 : compact ? 23 : 19;
+            year.FontSize = horizontal ? 12 : personalVertical ? 13 : compact ? 17 : 14;
             double minTitleSize = horizontal ? 9.5 : compact ? 13 : 11;
             double titleWidth = horizontal ? HorizontalArtworkWidth :
                 glass.Width - glass.BorderThickness.Left - glass.BorderThickness.Right - face.Margin.Left - face.Margin.Right;
@@ -599,9 +709,14 @@ namespace NghiLe
             // At the smallest font size, extra text is trimmed inside the single-line slot.
             year.MaxWidth = titleWidth * year.FontSize / minTitleSize;
             UpdateGreetingTypography();
-            greeting.Margin = horizontal ? new Thickness(128, 0, 19, 0) : new Thickness(16, 42, 16, 0);
-            days.Height = horizontal ? 49 : compact ? 91 : 73;
+            greeting.Margin = horizontal ? new Thickness(128, 0, 19, 0) : new Thickness(16, personal ? 97 : 42, 16, 0);
+            days.Height = horizontal ? 49 : personalVertical ? (compact ? 71 : 54) : compact ? 91 : 73;
             dayUnit.FontSize = horizontal ? 9 : compact ? 11 : 9.5;
+            dayCount.Margin = horizontal ? new Thickness(2, 0, 2, 0) : new Thickness(2, 1, 2, personalVertical ? 2 : 6);
+            divider.Height = personalVertical ? 6 : 11;
+            foreach (var number in time) number.FontSize = horizontal ? 23 : personalVertical ? 21 : 25;
+            dateStatus.FontSize = personalVertical ? 9 : 10;
+            dateStatus.Margin = new Thickness(0, personalVertical ? 3 : 6, 0, 0);
             dateStatus.Visibility = horizontal || compact ? Visibility.Collapsed : Visibility.Visible;
             if (unavailableStatus != null) year.Text = horizontal || compact ? unavailableStatus : ProductName;
             UpdateDayPresentation();
@@ -617,7 +732,11 @@ namespace NghiLe
         {
             bool abbreviated = compact || config.Horizontal;
             bool wideNumber = days.Text.Length >= 4;
-            days.FontSize = config.Horizontal ? (wideNumber ? 32 : days.Text.Length == 3 ? 40 : 46) : wideNumber ? 62 : compact ? 87 : 70;
+            if (config.Horizontal)
+                days.FontSize = wideNumber ? 32 : days.Text.Length == 3 ? 40 : 46;
+            else if (PersonalDate.IsTheme(displayedTheme))
+                days.FontSize = wideNumber ? 47 : compact ? 64 : 55;
+            else days.FontSize = wideNumber ? 62 : compact ? 87 : 70;
             string symbol = displayedSeconds < 0 ? "NGÀY" : CountdownUnits.Symbol(config.CounterMode);
             if (displayedExtraDays > 0 && displayedSeconds > 0)
                 symbol += " · " + displayedExtraDays.ToString(CultureInfo.InvariantCulture) + " NGÀY";
@@ -650,11 +769,13 @@ namespace NghiLe
         private HolidayOccurrence? GetHoliday(DateTimeOffset local)
         {
             int fixedYear = config.Automatic ? 0 : config.Year;
-            if (holidayLookupDate != local.Date || holidayLookupSelection != config.SelectedHolidays || holidayLookupFixedYear != fixedYear)
+            if (holidayLookupDate != local.Date || holidayLookupSelection != config.SelectedHolidays ||
+                holidayLookupPersonalDates != config.PersonalDates || holidayLookupFixedYear != fixedYear)
             {
                 holidayLookupResult = HolidayCountdown.FindForDay(config, local);
                 holidayLookupDate = local.Date;
                 holidayLookupSelection = config.SelectedHolidays;
+                holidayLookupPersonalDates = config.PersonalDates;
                 holidayLookupFixedYear = fixedYear;
             }
             return holidayLookupResult;
@@ -663,17 +784,21 @@ namespace NghiLe
         private void UpdateClock(DateTimeOffset now)
         {
             var local = now.ToOffset(HolidayCountdown.VietnamOffset);
+            if (settingsWindow != null) settingsWindow.RefreshUpcoming(local);
             var unit = config.CounterMode;
             bool unitChanged = unit != displayedUnit;
             var occurrence = GetHoliday(local);
             var target = occurrence.HasValue ? (DateTimeOffset?)occurrence.Value.Date : null;
             var theme = occurrence.HasValue ? (HolidayTheme?)occurrence.Value.Theme : null;
-            string unavailable = target.HasValue ? null : config.SelectedHolidays.Length == 0 ? "Chưa chọn ngày nghỉ" : "Hết dữ liệu lịch";
+            var name = occurrence.HasValue ? occurrence.Value.Name : null;
+            string unavailable = target.HasValue ? null :
+                config.SelectedHolidays.Length == 0 && !config.PersonalDates.Any(date => date.Enabled)
+                    ? "Chưa chọn ngày nghỉ" : "Hết dữ liệu lịch";
             var seconds = target.HasValue ? Calendar.Seconds(target.Value, now) : -1;
             string greetingTitle = occurrence.HasValue && seconds == 0 && local.Date <= occurrence.Value.LastDay.Date ? GreetingFor(theme) : null;
             bool showGreeting = greetingTitle != null;
             bool themeChanged = theme != displayedTheme || unavailable != unavailableStatus;
-            bool targetChanged = target != displayedTarget || themeChanged;
+            bool targetChanged = target != displayedTarget || themeChanged || name != displayedName;
             if (!targetChanged && !unitChanged && seconds == displayedSeconds && celebrating == showGreeting) return;
 
             bool dateChanged = targetChanged || (seconds == 0) != (displayedSeconds == 0);
@@ -681,12 +806,16 @@ namespace NghiLe
             displayedTarget = target;
             displayedSeconds = seconds;
             displayedTheme = theme;
+            displayedName = name;
             displayedUnit = unit;
             unavailableStatus = unavailable;
-            if (themeChanged) ApplyHolidayTheme(theme);
-            if (themeChanged) UpdateGreetingTypography();
+            if (themeChanged)
+            {
+                ApplyHolidayTheme(theme);
+                ApplyFaceTypography(compact);
+            }
             if (dateChanged && settingsWindow != null)
-                settingsWindow.ShowOccurrence(theme, target, seconds == 0, unavailable);
+                settingsWindow.ShowOccurrence(name, target, seconds == 0, unavailable);
             if (targetChanged || celebrating != showGreeting) UpdateGreeting(greetingTitle, theme, target, local);
             if (!target.HasValue)
             {
@@ -702,8 +831,7 @@ namespace NghiLe
             var day = target.Value;
             if (targetChanged)
             {
-                year.Text = theme == HolidayTheme.LunarNewYear ? Calendar.Name(day.Year) + " · " + day.Year :
-                    HolidaySetting.All.First(holiday => holiday.Theme == theme).Name;
+                year.Text = theme == HolidayTheme.LunarNewYear ? Calendar.Name(day.Year) + " · " + day.Year : name;
                 ToolTip = year.Text + " · " + day.ToString("dd/MM/yyyy") + " · Giờ Việt Nam";
             }
             if (quantityChanged)
@@ -729,6 +857,8 @@ namespace NghiLe
                 case HolidayTheme.MidAutumn: return "Vui Tết Trung thu";
                 case HolidayTheme.Christmas: return "Giáng sinh an lành";
                 case HolidayTheme.VietnamCultureDay: return HolidaySetting.VietnamCultureDayName;
+                case HolidayTheme.Birthday: return "Chúc mừng sinh nhật!";
+                case HolidayTheme.PersonalDay: return "Mừng ngày đặc biệt!";
                 default: return null;
             }
         }
@@ -741,6 +871,10 @@ namespace NghiLe
                 greetingText.Text = title;
                 greetingDetail.Text = theme == HolidayTheme.LunarNewYear ? Calendar.Name(target.Value.Year) + " · " + target.Value.Year :
                     now.ToString("dd/MM");
+                if ((theme == HolidayTheme.Birthday && displayedName != PersonalDate.BirthdayName) ||
+                    (theme == HolidayTheme.PersonalDay && displayedName != PersonalDate.SpecialDayName))
+                    greetingDetail.Text = displayedName + " · " + greetingDetail.Text;
+                greetingDetail.ToolTip = greetingDetail.Text;
             }
             greeting.Visibility = celebrating ? Visibility.Visible : Visibility.Collapsed;
             face.Visibility = celebrating ? Visibility.Hidden : Visibility.Visible;
@@ -780,8 +914,9 @@ namespace NghiLe
             controls.VerticalAlignment = VerticalAlignment.Top;
             controls.HorizontalAlignment = HorizontalAlignment.Left;
             controls.Opacity = 0;
+            controls.Children.Add(MakeButton("Sắp tới", "Dịp sắp tới (F3)", OpenUpcoming));
             controls.Children.Add(MakeButton("⚙", "Cài đặt (F2)", OpenSettings));
-            controls.Children.Add(MakeButton("×", "Ẩn widget", Hide));
+            controls.Children.Add(MakeButton("×", "Ẩn widget", HideWidget));
             surface.Children.Add(controls);
         }
 
@@ -870,6 +1005,199 @@ namespace NghiLe
             return optionsPage;
         }
 
+        private FrameworkElement BuildPetSettings()
+        {
+            var fields = new StackPanel();
+            fields.Children.Add(PanelPage.SectionHeading("Thú cưng trên thanh tác vụ", settingsWindow, 0));
+            double artSize = TaskbarPet.SizeInPixels(config.PetSizePercent, 96) * .72;
+            var artwork = new PetArtwork { Width = artSize, Height = artSize };
+            artwork.SetPose(config.PetAnimal);
+            var artFrame = new Grid { Width = 78, Height = 78, Margin = new Thickness(0, 0, 12, 0) };
+            artFrame.Children.Add(artwork);
+            var description = new TextBlock { Text = "Thú cưng đậu trên mép thanh tác vụ. Bấm giữ để nhấc thú cưng lên, rồi thả xuống vị trí bạn muốn.",
+                FontSize = 14, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            description.SetResourceReference(TextBlock.ForegroundProperty, "PanelMuted");
+            var preview = new DockPanel();
+            preview.Children.Add(artFrame);
+            preview.Children.Add(description);
+            var card = new Border { Child = preview, CornerRadius = new CornerRadius(5), Padding = new Thickness(12, 3, 12, 3),
+                Margin = new Thickness(0, 3, 0, 8) };
+            card.SetResourceReference(Border.BackgroundProperty, "PanelField");
+            fields.Children.Add(card);
+
+            var status = new TextBlock { Margin = new Thickness(0, 8, 0, 0), FontSize = 13, TextWrapping = TextWrapping.Wrap,
+                Visibility = Visibility.Collapsed };
+            status.SetResourceReference(TextBlock.ForegroundProperty, "PanelError");
+            AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
+            Action<bool> showFailure = failed =>
+            {
+                status.Visibility = failed ? Visibility.Visible : Visibility.Collapsed;
+                status.Text = failed ? "Không lưu được tùy chọn thú cưng. Hãy thử lại." : "";
+                var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(status);
+                if (failed && peer != null) peer.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
+            };
+
+            var showNow = new Button { Name = "ShowPetNow", Content = "Hiện thú cưng ngay", MinHeight = 34,
+                Margin = new Thickness(0, 0, 8, 4), IsEnabled = config.PetEnabled };
+            showNow.Click += (s, e) => ShowPet(false);
+            var showBoth = new Button { Name = "ShowPetAndClock", Content = "Hiện cả hai", MinHeight = 34,
+                Margin = new Thickness(0, 0, 0, 4), IsEnabled = config.PetEnabled };
+            showBoth.SetResourceReference(StyleProperty, "PanelPrimary");
+            showBoth.Click += (s, e) => ShowPet(true);
+
+            var enable = CreateSwitch("Bật chế độ thú cưng", "Bật chế độ thú cưng", config.PetEnabled);
+            enable.Name = "EnableTaskbarPet";
+            enable.Click += (s, e) =>
+            {
+                bool saved = SavePetOption(enable.IsChecked == true, config.PetEnabled, value => config.PetEnabled = value);
+                enable.IsChecked = showNow.IsEnabled = showBoth.IsEnabled = config.PetEnabled;
+                showFailure(!saved);
+            };
+            AddOptionRow(fields, enable);
+            var dragonOptions = new StackPanel();
+            DragonClip sample = DragonClip.Sleep;
+            var sampleOffset = new TranslateTransform();
+            artFrame.ClipToBounds = true;
+            artwork.RenderTransform = sampleOffset;
+            var sampleClock = new System.Diagnostics.Stopwatch();
+            var sampleTimer = new DispatcherTimer(DispatcherPriority.Background);
+            Action sizeSample = () =>
+            {
+                bool dragon = config.PetAnimal == PetAnimal.HacLong;
+                artFrame.Width = dragon ? 144 : 78;
+                artFrame.Height = dragon ? 112 : 78;
+                artwork.GroundAtBottom = dragon;
+                artwork.Width = artwork.Height = TaskbarPet.SizeInPixels(config.PetSizePercent, 96) *
+                    (dragon ? .86 : .72);
+            };
+            Action drawSample = () =>
+            {
+                double seconds = sampleClock.Elapsed.TotalSeconds;
+                var pose = DragonMotion.Preview(sample, seconds);
+                var offset = pose.Offset();
+                double scale = Math.Min((artFrame.Width - artwork.Width) / DragonMotion.FlightWidth,
+                    (artFrame.Height - artwork.Height) / DragonMotion.FlightCeiling);
+                bool flying = sample == DragonClip.Fly;
+                sampleOffset.X = flying ? (offset.X - DragonMotion.FlightWidth / 2.0) * scale : 0;
+                sampleOffset.Y = (artFrame.Height - artwork.Height) / 2 - offset.Y * scale;
+                artwork.SetDragonPose(sample, pose.Seconds, pose.FacingOutward < .5, pose.ProfileWidth);
+                if (pose.Progress == 1)
+                {
+                    sampleTimer.Stop();
+                    sampleClock.Stop();
+                }
+                else sampleTimer.Interval = sample.NextTick(pose.Seconds);
+            };
+            Action refreshSample = () =>
+            {
+                sampleTimer.Stop();
+                sampleClock.Reset();
+                bool dragon = config.PetAnimal == PetAnimal.HacLong;
+                dragonOptions.Visibility = dragon ? Visibility.Visible : Visibility.Collapsed;
+                sizeSample();
+                if (!dragon)
+                {
+                    sampleOffset.X = sampleOffset.Y = 0;
+                    artwork.SetPose(config.PetAnimal);
+                    return;
+                }
+                drawSample();
+                if (artwork.IsVisible && config.Motion && SystemParameters.ClientAreaAnimation)
+                {
+                    sampleClock.Start();
+                    sampleTimer.Start();
+                }
+            };
+            sampleTimer.Tick += (s, e) => drawSample();
+            artwork.IsVisibleChanged += (s, e) => refreshSample();
+            artwork.Unloaded += (s, e) => { sampleTimer.Stop(); sampleClock.Reset(); };
+            AddPetChoice(fields, "PetSpecies", "Loại thú cưng", config.PetAnimal,
+                new[] { PetAnimal.Cat, PetAnimal.Dog, PetAnimal.HacLong }, new[] { "Mèo", "Chó", "Hắc Long" },
+                next => SavePetOption(next, config.PetAnimal, value => { config.PetAnimal = value; refreshSample(); }), showFailure);
+            AddPetChoice(dragonOptions, "DragonPreview", "Xem thử động tác", sample, DragonClip.All,
+                DragonClip.All.Select(clip => clip.Title).ToArray(),
+                clip => { sample = clip; refreshSample(); return true; }, showFailure);
+            fields.Children.Add(dragonOptions);
+            refreshSample();
+            AddPetChoice(fields, "PetDelayMinutes", "Thời gian chờ", config.PetDelayMinutes,
+                TaskbarPet.DelayOptions, TaskbarPet.DelayOptions.Select(value => value + " phút").ToArray(),
+                next => SavePetOption(next, config.PetDelayMinutes, value => config.PetDelayMinutes = value), showFailure);
+            AddPetChoice(fields, "PetMovement", "Chuyển động", config.PetRoams,
+                new[] { true, false }, new[] { "Thỉnh thoảng", "Ở yên" },
+                next => SavePetOption(next, config.PetRoams, value => config.PetRoams = value), showFailure);
+            AddPetChoice(fields, "PetPosition", "Vị trí đậu", config.PetAtEnd,
+                new[] { false, true }, new[] { "Gần đầu thanh", "Gần cuối thanh" },
+                next =>
+                {
+                    if (!SavePetOption(next, config.PetAtEnd, value => config.PetAtEnd = value)) return false;
+                    if (pet != null) pet.ResetPerch();
+                    return true;
+                }, showFailure);
+            var sizeControl = new DockPanel { Width = 230, HorizontalAlignment = HorizontalAlignment.Right };
+            var percent = new TextBlock { Width = 48, FontSize = 13, TextAlignment = TextAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center, Text = config.PetSizePercent + "%" };
+            percent.SetResourceReference(TextBlock.ForegroundProperty, "PanelMuted");
+            DockPanel.SetDock(percent, Dock.Right);
+            sizeControl.Children.Add(percent);
+            var size = new Slider { Name = "PetSizePercent", Minimum = TaskbarPet.MinimumSizePercent,
+                Maximum = TaskbarPet.MaximumSizePercent, Value = config.PetSizePercent,
+                TickFrequency = 5, SmallChange = 5, LargeChange = 25, IsSnapToTickEnabled = true, IsMoveToPointEnabled = true,
+                VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetName(size, "Kích thước thú cưng theo phần trăm");
+            size.ValueChanged += (s, e) =>
+            {
+                config.PetSizePercent = (int)e.NewValue;
+                percent.Text = config.PetSizePercent + "%";
+                sizeSample();
+                if (config.PetAnimal == PetAnimal.HacLong) drawSample();
+                ScheduleSave();
+            };
+            sizeControl.Children.Add(size);
+            AddOptionRow(fields, sizeControl, "Kích thước thú cưng");
+            fields.Children.Add(status);
+            var actions = new WrapPanel { Margin = new Thickness(0, 14, 0, 0) };
+            actions.Children.Add(showNow);
+            actions.Children.Add(showBoth);
+            fields.Children.Add(actions);
+            return PanelPage.Scroll(fields);
+        }
+
+        private static void AddPetChoice<T>(StackPanel fields, string name, string label, T current, T[] values, string[] labels,
+            Func<T, bool> apply, Action<bool> showFailure)
+        {
+            var picker = new ComboBox { Name = name, Width = 170, MinHeight = 32, FontSize = 14,
+                HorizontalAlignment = HorizontalAlignment.Right };
+            AutomationProperties.SetName(picker, label);
+            foreach (string title in labels) picker.Items.Add(new ComboBoxItem { Content = title });
+            int savedIndex = Array.IndexOf(values, current);
+            picker.SelectedIndex = savedIndex;
+            picker.SelectionChanged += (s, e) =>
+            {
+                int index = picker.SelectedIndex;
+                if (index < 0 || index == savedIndex) return;
+                bool saved = apply(values[index]);
+                if (saved) savedIndex = index;
+                else picker.SelectedIndex = savedIndex;
+                showFailure(!saved);
+            };
+            AddOptionRow(fields, picker, label);
+        }
+
+        private bool SavePetOption<T>(T next, T previous, Action<T> apply)
+        {
+            apply(next);
+            if (!Persist())
+            {
+                apply(previous);
+                return false;
+            }
+            showPetItem.Enabled = config.PetEnabled;
+            showBothItem.Enabled = config.PetEnabled;
+            if (!config.PetEnabled && pet != null) pet.Stop();
+            ResetPetDelay();
+            return true;
+        }
+
         private static void AddOptionRow(StackPanel fields, FrameworkElement control, string label = null)
         {
             FrameworkElement content = control;
@@ -929,6 +1257,7 @@ namespace NghiLe
                 resizing = false;
                 PlaceOnScreen();
                 Persist();
+                ResetPetDelay();
                 UpdateControls();
             };
             resizeGrip.PreviewKeyDown += (s, e) =>
@@ -990,12 +1319,21 @@ namespace NghiLe
             input.Unchecked += update;
         }
 
-        private void OpenSettings()
+        private void OpenSettings() { OpenSettings(false); }
+
+        private void OpenUpcoming()
         {
+            if (!IsVisible) ShowWidget();
+            OpenSettings(true);
+        }
+
+        private void OpenSettings(bool upcoming)
+        {
+            petDelay.Stop();
             if (settingsWindow == null)
             {
                 settingsWindow = new SettingsWindow(this, config, () => { UpdateClock(); Persist(); },
-                    ScheduleSave, BuildSettings, CreateMusic, SetSpringStyle);
+                    ScheduleSave, BuildSettings, BuildPetSettings, CreateMusic, SetSpringStyle, SavePersonalDates, SaveReminder);
                 settingsWindow.Closed += (s, e) =>
                 {
                     if (music != null) music.Dispose();
@@ -1003,10 +1341,86 @@ namespace NghiLe
                     optionsPage = null;
                     settingsWindow = null;
                     if (!quitting) Persist();
+                    ResetPetDelay();
                 };
             }
-            settingsWindow.ShowOccurrence(displayedTheme, displayedTarget, displayedSeconds == 0, unavailableStatus);
-            settingsWindow.OpenHolidays();
+            settingsWindow.ShowOccurrence(displayedName, displayedTarget, displayedSeconds == 0, unavailableStatus);
+            settingsWindow.Open(upcoming);
+        }
+
+        private bool SavePersonalDates(PersonalDate[] dates)
+        {
+            var previous = config.PersonalDates;
+            var previousReminders = config.ReminderDays;
+            if (dates.Length < previous.Length)
+            {
+                config.ReminderDays = new Dictionary<string, int>(previousReminders, StringComparer.Ordinal);
+                foreach (var deleted in previous.Where(date => !dates.Any(item => item.Id == date.Id)))
+                    config.ReminderDays.Remove(deleted.Id.ToString("N"));
+            }
+            config.PersonalDates = dates;
+            if (Persist())
+            {
+                UpdateClock();
+                UpdateReminderTimer();
+                return true;
+            }
+            config.PersonalDates = previous;
+            config.ReminderDays = previousReminders;
+            return false;
+        }
+
+        private bool SaveReminder(string id, int days)
+        {
+            var previous = config.ReminderDays;
+            var updated = new Dictionary<string, int>(previous, StringComparer.Ordinal);
+            if (days == OccasionReminders.Off) updated.Remove(id);
+            else updated[id] = days;
+            config.ReminderDays = updated;
+            if (!Persist())
+            {
+                config.ReminderDays = previous;
+                return false;
+            }
+            UpdateReminderTimer();
+            return true;
+        }
+
+        private void UpdateReminderTimer()
+        {
+            if (config.ReminderDays.Count == 0) reminderTick.Stop();
+            else
+            {
+                CheckReminders();
+                reminderTick.Start();
+            }
+        }
+
+        private void CheckReminders()
+        {
+            string message = RecordDueReminders(DateTimeOffset.UtcNow);
+            if (message != null)
+                tray.ShowBalloonTip(10000, ProductName + " · Nhắc ngày", message, Forms.ToolTipIcon.None);
+        }
+
+        private string RecordDueReminders(DateTimeOffset now)
+        {
+            var local = now.ToOffset(HolidayCountdown.VietnamOffset);
+            var due = OccasionReminders.Due(config, now);
+            if (due.Count == 0) return null;
+            var previous = config.DeliveredReminders;
+            config.DeliveredReminders = OccasionReminders.Record(previous, due.Keys, local.Date);
+            if (!Persist())
+            {
+                config.DeliveredReminders = previous;
+                return null;
+            }
+
+            var lines = due.Values.Take(2)
+                .Select(occasion => OccasionReminders.CountdownLabel(occasion, local.Date) + " · " + occasion.Name);
+            string message = string.Join(Environment.NewLine, lines);
+            if (due.Count > 2) message += Environment.NewLine + "Và " + (due.Count - 2) + " dịp khác.";
+            return message;
         }
 
         private void SetSpringStyle(bool apricot)
@@ -1089,6 +1503,184 @@ namespace NghiLe
                 year.Text = original;
                 UpdateLayout();
             }
+        }
+
+        private int CheckPersonalDatesPage()
+        {
+            var tab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "PersonalDatesTab");
+            if (tab == null) return 92;
+            tab.IsSelected = true;
+            settingsWindow.UpdateLayout();
+            var page = (PersonalDatesPage)((ScrollViewer)tab.Content).Content;
+            var preview = (HolidayScene)LogicalTreeHelper.FindLogicalNode(page, "PersonalDatePreview");
+            var name = (TextBox)LogicalTreeHelper.FindLogicalNode(page, "PersonalDateName");
+            var day = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "PersonalDateDay");
+            var month = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "PersonalDateMonth");
+            var add = (Button)LogicalTreeHelper.FindLogicalNode(page, "SavePersonalDate");
+            var status = (TextBlock)LogicalTreeHelper.FindLogicalNode(page, "PersonalDateStatus");
+            Action<string> click = controlName =>
+            {
+                var button = (Button)LogicalTreeHelper.FindLogicalNode(page, controlName);
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            };
+            if (!preview.IsAnimating || preview.ActualWidth < 100 || !add.IsVisible) return 93;
+            name.Text = "Sinh nhật An";
+            day.SelectedIndex = 31;
+            month.SelectedIndex = 4;
+            click("SavePersonalDate");
+            if (config.PersonalDates.Length != 0 || string.IsNullOrEmpty(status.Text) || name.Text != "Sinh nhật An") return 94;
+
+            day.SelectedIndex = 15;
+            month.SelectedIndex = 12;
+            click("SavePersonalDate");
+            var saved = file.Read().PersonalDates.SingleOrDefault();
+            if (saved == null || saved.Name != "Sinh nhật An" || !saved.Birthday || !saved.Enabled || saved.Day != 15 || saved.Month != 12)
+                return 95;
+
+            var birthday = new DateTimeOffset(2026, 12, 15, 0, 0, 0, HolidayCountdown.VietnamOffset);
+            UpdateClock(birthday.AddSeconds(-1));
+            SetScale(1);
+            UpdateLayout();
+            if (displayedTheme != HolidayTheme.Birthday || year.Text != saved.Name || time[2].Text != "01" || celebrating ||
+                !holidayScene.IsAnimating || dateStatus.TranslatePoint(new Point(), glass).Y + dateStatus.ActualHeight > 249) return 96;
+            SetScale(.6);
+            UpdateClock(birthday.ToUniversalTime());
+            if (!celebrating || greetingText.Text != "Chúc mừng sinh nhật!" || greetingDetail.Text != "Sinh nhật An · 15/12") return 97;
+            UpdateClock(birthday.AddDays(1));
+            if (celebrating || displayedTheme == HolidayTheme.Birthday) return 98;
+
+            click("EditPersonalDate");
+            name.Text = "Sinh nhật của An";
+            click("SavePersonalDate");
+            var edited = file.Read().PersonalDates.Single();
+            if (edited.Id != saved.Id || edited.Name != "Sinh nhật của An") return 99;
+            var track = (CheckBox)LogicalTreeHelper.FindLogicalNode(page, "TrackPersonalDate");
+            track.IsChecked = false;
+            track.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if (config.PersonalDates[0].Enabled || file.Read().PersonalDates.Single().Enabled) return 100;
+            click("EditPersonalDate");
+            click("DeletePersonalDate");
+            click("KeepPersonalDate");
+            if (config.PersonalDates.Length != 1) return 101;
+            click("DeletePersonalDate");
+            click("ConfirmDeletePersonalDate");
+            return config.PersonalDates.Length == 0 && file.Read().PersonalDates.Length == 0 ? 0 : 102;
+        }
+
+        private int CheckUpcomingPage()
+        {
+            var selection = config.SelectedHolidays;
+            config.SelectedHolidays = new string[0];
+            var target = DateTimeOffset.UtcNow.ToOffset(HolidayCountdown.VietnamOffset).AddMonths(3);
+            var personal = new PersonalDate { Id = Guid.NewGuid(), Name = "Kỷ niệm gia đình", Enabled = true,
+                Day = target.Day, Month = target.Month };
+            config.PersonalDates = new[] { personal };
+            var open = controls.Children.OfType<Button>().Single(button => (string)button.Content == "Sắp tới");
+            open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var tab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "UpcomingTab");
+            if (tab == null || !tab.IsSelected) return 103;
+            settingsWindow.Width = settingsWindow.MinWidth;
+            settingsWindow.Height = settingsWindow.MinHeight;
+            settingsWindow.UpdateLayout();
+            var page = (UpcomingPage)((ScrollViewer)tab.Content).Content;
+            var picker = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "OccasionReminder");
+            if (picker == null || !picker.IsVisible || picker.Items.Count != 4 || picker.SelectedIndex != 0 ||
+                !AutomationProperties.GetName(picker).Contains(personal.Name)) return 104;
+            picker.Focus();
+            picker.IsDropDownOpen = true;
+            settingsWindow.UpdateLayout();
+            if (!picker.IsDropDownOpen || picker.ActualWidth < 130) return 105;
+            picker.IsDropDownOpen = false;
+            picker.SelectedIndex = 1;
+            int days;
+            if (!file.Read().ReminderDays.TryGetValue(personal.Id.ToString("N"), out days) || days != 7 ||
+                !reminderTick.IsEnabled) return 106;
+            Hide();
+            if (tick.IsEnabled || !reminderTick.IsEnabled) return 107;
+            var dueAt = new DateTimeOffset(target.Year, target.Month, target.Day, 9, 0, 0, target.Offset).AddDays(-7);
+            if (RecordDueReminders(dueAt.AddSeconds(-1)) != null ||
+                RecordDueReminders(dueAt.ToUniversalTime()) != "Còn 7 ngày · " + personal.Name ||
+                file.Read().DeliveredReminders.Length != 1 || RecordDueReminders(dueAt.AddHours(1)) != null) return 114;
+            trayMenu.MenuItems.Cast<Forms.MenuItem>().Single(item => item.Text == "Dịp sắp tới").PerformClick();
+            tab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "UpcomingTab");
+            if (!IsVisible || !tab.IsSelected) return 108;
+            page = (UpcomingPage)((ScrollViewer)tab.Content).Content;
+            picker = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "OccasionReminder");
+            if (picker.SelectedIndex != 1 || !SavePersonalDates(new PersonalDate[0]) || reminderTick.IsEnabled ||
+                file.Read().ReminderDays.Count != 0) return 109;
+            page.Refresh(DateTimeOffset.UtcNow.ToOffset(HolidayCountdown.VietnamOffset));
+            if (LogicalTreeHelper.FindLogicalNode(page, "OccasionReminder") != null) return 110;
+            config.SelectedHolidays = selection;
+            UpdateClock();
+            return 0;
+        }
+
+        private int CheckPetSettingsAndMode()
+        {
+            if (config.PetEnabled || petDelay.IsEnabled || showPetItem.Enabled || showBothItem.Enabled) return 115;
+            OpenSettings();
+            var tab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "PetTab");
+            if (tab == null) return 116;
+            tab.IsSelected = true;
+            settingsWindow.Width = settingsWindow.MinWidth;
+            settingsWindow.Height = settingsWindow.MinHeight;
+            settingsWindow.UpdateLayout();
+            var page = ((ScrollViewer)tab.Content).Content as FrameworkElement;
+            var enable = (CheckBox)LogicalTreeHelper.FindLogicalNode(page, "EnableTaskbarPet");
+            var species = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "PetSpecies");
+            var delay = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "PetDelayMinutes");
+            var movement = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "PetMovement");
+            var position = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "PetPosition");
+            var showNow = (Button)LogicalTreeHelper.FindLogicalNode(page, "ShowPetNow");
+            var showBoth = (Button)LogicalTreeHelper.FindLogicalNode(page, "ShowPetAndClock");
+            var size = (Slider)LogicalTreeHelper.FindLogicalNode(page, "PetSizePercent");
+            if (!species.IsVisible || species.Items.Count != 3 || species.SelectedIndex != 0 || delay.SelectedIndex != 1 ||
+                movement.SelectedIndex != 0 || position.SelectedIndex != 0 || showNow.IsEnabled || showBoth.IsEnabled ||
+                size.Minimum != 50 || size.Maximum != 200 || size.Value != 100) return 117;
+            if (species.ActualWidth < 160) return 118;
+            var preview = (ComboBox)LogicalTreeHelper.FindLogicalNode(page, "DragonPreview");
+            if (preview == null || preview.IsVisible) return 132;
+            species.SelectedIndex = 2;
+            if (!preview.IsVisible || preview.Items.Count != DragonClip.All.Length || preview.SelectedIndex != 0 ||
+                file.Read().PetAnimal != PetAnimal.HacLong) return 132;
+            for (int i = 0; i < preview.Items.Count; i++) preview.SelectedIndex = i;
+            species.SelectedIndex = 1;
+            if (preview.IsVisible) return 132;
+            delay.SelectedIndex = 0;
+            movement.SelectedIndex = 1;
+            position.SelectedIndex = 1;
+            enable.IsChecked = true;
+            enable.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var restored = file.Read();
+            if (!showNow.IsEnabled || !showBoth.IsEnabled || !showPetItem.Enabled || !showBothItem.Enabled ||
+                !restored.PetEnabled || restored.PetAnimal != PetAnimal.Dog ||
+                restored.PetDelayMinutes != 1 || restored.PetRoams || !restored.PetAtEnd || petDelay.IsEnabled) return 119;
+
+            size.Value = 50;
+            if (config.PetSizePercent != 50) return 128;
+            size.Value = 200;
+            species.SelectedIndex = 2;
+            showBoth.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            if (settingsWindow != null || !IsVisible || pet == null || !pet.IsRunning || petDelay.IsEnabled ||
+                !tick.IsEnabled || file.Read().PetSizePercent != 200) return 129;
+            ShowWidget();
+            if (!petDelay.IsEnabled || petDelay.Interval != TimeSpan.FromMinutes(1) || !tick.IsEnabled) return 120;
+            config.ReminderDays[HolidaySetting.NewYear] = 7;
+            UpdateReminderTimer();
+            EnterPetModeAfterDelay();
+            if (pet == null || !pet.IsRunning || IsVisible || tick.IsEnabled || petDelay.IsEnabled || !reminderTick.IsEnabled)
+                return 121;
+            trayMenu.MenuItems[0].PerformClick();
+            if (!IsVisible || pet.IsRunning || !petDelay.IsEnabled || !tick.IsEnabled) return 122;
+
+            showPetItem.PerformClick();
+            if (!pet.IsRunning || IsVisible) return 123;
+            showBothItem.PerformClick();
+            if (!pet.IsRunning || !IsVisible || !tick.IsEnabled || petDelay.IsEnabled) return 130;
+            HideWidget();
+            if (pet.IsVisible || pet.IsRunning || petDelay.IsEnabled || IsVisible) return 124;
+            ShowWidget();
+            return 0;
         }
 
         internal int CheckWindowLifecycle()
@@ -1221,6 +1813,8 @@ namespace NghiLe
             var optionsTab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "OptionsTab");
             var musicTab = (TabItem)LogicalTreeHelper.FindLogicalNode(settingsWindow, "MusicTab");
             if (optionsTab == null || musicTab == null) return 78;
+            int personalDatesResult = CheckPersonalDatesPage();
+            if (personalDatesResult != 0) return personalDatesResult;
             musicTab.IsSelected = true;
             settingsWindow.UpdateLayout();
             if (music == null || !music.IsVisible || music.ActualWidth < 200 ||
@@ -1259,6 +1853,8 @@ namespace NghiLe
             UpdateLayout();
             if (!settingsWindow.IsVisible || settingsWindow == lastSettings || Math.Abs(ActualWidth - 360) > 1 ||
                 Math.Abs(ActualHeight - 84) > 1 || !tick.IsEnabled || !holidayScene.IsAnimating) return 52;
+            int upcomingResult = CheckUpcomingPage();
+            if (upcomingResult != 0) return upcomingResult;
             config.Horizontal = false;
             ApplyOrientation();
             settingsWindow.Close();
@@ -1266,7 +1862,8 @@ namespace NghiLe
             Close();
             if (IsVisible || tick.IsEnabled || holidayScene.IsAnimating) return 25;
             ShowWidget();
-            return IsVisible && tick.IsEnabled && holidayScene.IsAnimating ? 0 : 26;
+            if (!IsVisible || !tick.IsEnabled || !holidayScene.IsAnimating) return 26;
+            return CheckPetSettingsAndMode();
         }
 
         internal void Quit() { quitting = true; Close(); }
@@ -1349,9 +1946,65 @@ namespace NghiLe
             return clampedMonth.WholeUnits == 1 && clampedMonth.ExtraDays == 0 && weeks.WholeUnits == 11 && weeks.ExtraDays == 2;
         }
 
+        private static bool CheckPersonalCalendar()
+        {
+            var settings = new Settings();
+            var reminder = new PersonalDate { Id = Guid.NewGuid(), Name = "Sinh nhật", Birthday = true, Enabled = true, Day = 29, Month = 2 };
+            settings.PersonalDates = new[] { reminder };
+            var offset = HolidayCountdown.VietnamOffset;
+            var leapDay = new DateTimeOffset(2028, 2, 29, 0, 0, 0, offset);
+            if (!PersonalDate.IsValidDay(2, 29) || PersonalDate.IsValidDay(4, 31)) return false;
+            if (HolidayCountdown.Find(settings, leapDay.AddSeconds(-1)).Value.Date != leapDay ||
+                HolidayCountdown.Find(settings, leapDay.AddHours(23)).Value.Theme != HolidayTheme.Birthday) return false;
+            settings.SelectedHolidays = new string[0];
+            if (HolidayCountdown.Find(settings, leapDay.AddDays(1)).Value.Date != leapDay.AddYears(4)) return false;
+            settings.PersonalDates = new[] { reminder.WithEnabled(false) };
+            if (HolidayCountdown.Find(settings, leapDay).HasValue) return false;
+            settings.SelectedHolidays = new[] { HolidaySetting.LunarNewYear };
+            settings.PersonalDates = new[] { new PersonalDate { Id = Guid.NewGuid(), Name = "Kỷ niệm", Enabled = true, Day = 8, Month = 2 } };
+            var date = new DateTimeOffset(2027, 2, 8, 0, 0, 0, offset);
+            var occurrence = HolidayCountdown.Find(settings, date);
+            return occurrence.HasValue && occurrence.Value.Theme == HolidayTheme.PersonalDay && occurrence.Value.Name == "Kỷ niệm";
+        }
+
+        private static bool CheckOccasionReminders()
+        {
+            var tet = new DateTimeOffset(2027, 2, 6, 9, 0, 0, HolidayCountdown.VietnamOffset);
+            var birthday = new PersonalDate { Id = Guid.NewGuid(), Name = "Sinh nhật", Birthday = true,
+                Enabled = true, Day = 6, Month = 2 };
+            var another = new PersonalDate { Id = Guid.NewGuid(), Name = "Kỷ niệm", Enabled = true, Day = 7, Month = 2 };
+            var settings = new Settings { PersonalDates = new[] { another, birthday } };
+            string birthdayId = birthday.Id.ToString("N");
+            string anotherId = another.Id.ToString("N");
+            settings.ReminderDays[HolidaySetting.LunarNewYear] = 7;
+            settings.ReminderDays[birthdayId] = 0;
+            settings.ReminderDays[anotherId] = 1;
+            var beforeTet = tet.AddDays(-7).ToUniversalTime();
+            if (OccasionReminders.Due(settings, beforeTet.AddSeconds(-1)).Count != 0) return false;
+            if (OccasionReminders.Due(settings, beforeTet).Values.Single().Id != HolidaySetting.LunarNewYear) return false;
+            if (!HolidayCountdown.UpcomingTracked(settings, tet).Select(occasion => occasion.Id)
+                .SequenceEqual(new[] { HolidaySetting.LunarNewYear, birthdayId, anotherId })) return false;
+            var due = OccasionReminders.Due(settings, tet.AddHours(12));
+            if (due.Count != 2 || !due.Values.Any(item => item.Id == birthdayId) || !due.Values.Any(item => item.Id == anotherId))
+                return false;
+            settings.DeliveredReminders = OccasionReminders.Record(new[] { "20200101|old" }, due.Keys, tet.Date);
+            if (settings.DeliveredReminders.Length != 2 || OccasionReminders.Due(settings, tet.AddHours(13)).Count != 0 ||
+                OccasionReminders.Due(settings, tet.AddDays(1)).Count != 0) return false;
+            settings.DeliveredReminders = new string[0];
+            settings.PersonalDates = new[] { birthday.WithEnabled(false) };
+            if (OccasionReminders.Due(settings, tet).Count != 0) return false;
+            settings.Automatic = false;
+            settings.Year = 2026;
+            return !HolidayCountdown.UpcomingTracked(settings, tet).Any() && HolidayCountdown.Find(settings, tet).HasValue;
+        }
+
         private static int SelfTest()
         {
             if (!CheckUnits()) return 87;
+            if (!CheckPersonalCalendar()) return 92;
+            if (!CheckOccasionReminders()) return 111;
+            if (!CheckTaskbarRoute()) return 125;
+            if (!CheckPetMotion()) return 131;
             var s = new Settings { Automatic = false, Year = 2027 };
             var eve = new DateTimeOffset(2027, 2, 5, 17, 0, 0, TimeSpan.Zero);
             var d = HolidayCountdown.Find(s, eve);
@@ -1427,11 +2080,17 @@ namespace NghiLe
                 s.SettingsHeight = 700;
                 s.ApricotNewYear = true;
                 s.CounterMode = CountdownUnit.Weeks;
+                s.ReminderDays[HolidaySetting.LunarNewYear] = 7;
+                s.ReminderDays[HolidaySetting.NewYear] = 1;
+                s.DeliveredReminders = new[] { "20270130|lunar-new-year|20270206" };
                 if (!file.Save(s)) return 14;
                 s.Year = 2030; s.Automatic = false; s.Horizontal = true;
                 s.CounterMode = CountdownUnit.Months;
                 if (!file.Save(s)) return 15;
                 var restored = file.Read();
+                if (restored.ReminderDays.Count != 2 || restored.ReminderDays[HolidaySetting.LunarNewYear] != 7 ||
+                    restored.ReminderDays[HolidaySetting.NewYear] != 1 ||
+                    !restored.DeliveredReminders.SequenceEqual(s.DeliveredReminders)) return 112;
                 if (restored.Year != 2030 || restored.Automatic || restored.Motion || restored.AlwaysOnTop ||
                     restored.Glass != 100 || restored.Scale != .6 || restored.X != -200 || restored.Y != 10 || !restored.Horizontal ||
                     restored.CounterMode != CountdownUnit.Months ||
@@ -1439,6 +2098,9 @@ namespace NghiLe
                     restored.SettingsWidth != 740 || restored.SettingsHeight != 700 || !restored.ApricotNewYear) return 16;
                 File.WriteAllText(path, "{\"Glass\":88}");
                 var legacyDefaults = file.Read();
+                if (legacyDefaults.ReminderDays.Count != 0 || legacyDefaults.DeliveredReminders.Length != 0) return 113;
+                if (legacyDefaults.PetEnabled || legacyDefaults.PetAnimal != PetAnimal.Cat || legacyDefaults.PetDelayMinutes != 5 ||
+                    !legacyDefaults.PetRoams || legacyDefaults.PetAtEnd || legacyDefaults.PetSizePercent != 100) return 126;
                 if (legacyDefaults.Scale != 1 || legacyDefaults.Glass != 100 || legacyDefaults.Horizontal ||
                     legacyDefaults.CounterMode != CountdownUnit.Days ||
                     !legacyDefaults.SelectedHolidays.SequenceEqual(new[] { HolidaySetting.LunarNewYear })) return 18;
@@ -1451,10 +2113,118 @@ namespace NghiLe
                     migrated.CounterMode != CountdownUnit.Months) return 33;
                 File.WriteAllText(path, "{\"Version\":4,\"CounterMode\":3}");
                 if (file.Read().CounterMode != CountdownUnit.Days) return 89;
+                File.WriteAllText(path, "{\"Version\":6,\"PetEnabled\":true,\"PetAnimal\":99,\"PetDelayMinutes\":0}");
+                var invalidPet = file.Read();
+                if (!invalidPet.PetEnabled || invalidPet.PetAnimal != PetAnimal.Cat ||
+                    invalidPet.PetDelayMinutes != 5 || invalidPet.PetSizePercent != 100) return 127;
+                File.WriteAllText(path, "{\"Version\":7,\"PetEnabled\":true,\"PetAnimal\":2,\"PetSizePercent\":150}");
+                var removedPet = file.Read();
+                if (!removedPet.PetEnabled || removedPet.PetAnimal != PetAnimal.Cat || removedPet.PetSizePercent != 150)
+                    return 132;
                 File.WriteAllText(path, "{oops!");
                 return file.Read().Automatic ? 0 : 17;
             }
             finally { File.Delete(path); File.Delete(legacyPath); }
         }
+
+        private static bool CheckTaskbarRoute()
+        {
+            var screen = new Drawing.Rectangle(-1920, 0, 1920, 1080);
+            var bottom = new Drawing.Rectangle(-1920, 1032, 1920, 48);
+            var rail = new TaskbarRail(screen, bottom, true, false, 52, 8);
+            var start = rail.Perch(false, null, 0);
+            var end = rail.Perch(true, null, 0);
+            if (!screen.Contains(start) || start.Bottom != bottom.Top || end.Bottom != bottom.Top ||
+                start.Right >= end.Left || rail.Perch(false, null, 1).X <= start.X) return false;
+            var held = rail.Clamp(-630, -5);
+            var dropped = rail.Perch(false, rail.PerchFraction(held), 0);
+            if (held.Top != 0 || dropped.X != -630 || dropped.Bottom != bottom.Top) return false;
+
+            var hidden = new TaskbarRail(screen, new Drawing.Rectangle(-1920, 1078, 1920, 2), true, false, 52, 8);
+            if (hidden.Perch(false, hidden.PerchFraction(hidden.Clamp(-630, 10)), 0).Bottom != 1072) return false;
+            var top = new TaskbarRail(screen, new Drawing.Rectangle(-1920, 0, 1920, 48), true, true, 52, 8);
+            var left = new TaskbarRail(screen, new Drawing.Rectangle(-1920, 0, 48, 1080), false, true, 52, 8);
+            var right = new TaskbarRail(screen, new Drawing.Rectangle(-48, 0, 48, 1080), false, false, 52, 8);
+            return top.Perch(false, null, 0).Top == 48 && left.Perch(true, null, 0).Left == -1872 &&
+                right.Perch(false, null, 0).Right == -48;
+        }
+
+        private static bool CheckPetMotion()
+        {
+            var times = new[] { 1d, 5d, 9d, 16d, 25d, 32.6, 43d, 47d, 49d };
+            var actions = new[] { PetAction.Walk, PetAction.Rest, PetAction.Wag, PetAction.Sniff, PetAction.Stretch,
+                PetAction.Hop, PetAction.Nap, PetAction.Rest, PetAction.Walk };
+            for (int i = 0; i < times.Length; i++)
+            {
+                if (PetMotion.At(PetAnimal.Dog, times[i], true).Action != actions[i] ||
+                    PetMotion.At(PetAnimal.Dog, times[i], false).Action != PetAction.Rest) return false;
+            }
+            return CheckDragonMotion() && PetMotion.At(PetAnimal.Cat, 16, true).Action == PetAction.Rest &&
+                PetMotion.At(PetAnimal.Cat, 41, true).Action == PetAction.Walk &&
+                TaskbarPet.SizeInPixels(50, 96) == 26 && TaskbarPet.SizeInPixels(100, 96) == 52 &&
+                TaskbarPet.SizeInPixels(200, 96) == 104 && TaskbarPet.SizeInPixels(200, 144) == 156 &&
+                TaskbarPet.NormalizeSize(49) == 50 && TaskbarPet.NormalizeSize(201) == 200;
+        }
+
+        private static bool CheckDragonMotion()
+        {
+            var order = new[] { DragonClip.Sleep, DragonClip.Rise, DragonClip.Jump, DragonClip.Flap,
+                DragonClip.Fly, DragonClip.Land, DragonClip.Sulk };
+            var framesSeen = order.ToDictionary(clip => clip, clip => 0u);
+            var durations = order.ToDictionary(clip => clip, clip => 0);
+            int stage = -1;
+            DragonClip last = null;
+            var rail = new TaskbarRail(new Drawing.Rectangle(0, 0, 900, 600),
+                new Drawing.Rectangle(0, 560, 900, 40), true, false, 104, 8);
+            var still = DragonMotion.At(40, false);
+            if (still.Clip != DragonClip.Sleep || still.Seconds != 0 || still.Offset() != new Vector()) return false;
+            foreach (var transition in new[] { DragonClip.Rise, DragonClip.Sulk })
+            {
+                var end = DragonMotion.Preview(transition, 10);
+                if (end.Progress != 1 || transition.FrameAt(end.Seconds) != DragonClip.FrameCount - 1) return false;
+            }
+            for (int ms = 0; ms < DragonMotion.Duration * 1000; ms += 10)
+            {
+                var pose = DragonMotion.At(ms / 1000.0, true);
+                if ((pose.Clip == DragonClip.Rise || pose.Clip == DragonClip.Sulk) &&
+                    (pose.ProfileWidth != 1 || pose.FacingOutward != 0)) return false;
+                if (pose.Clip != last)
+                {
+                    if (++stage >= order.Length || pose.Clip != order[stage]) return false;
+                    last = pose.Clip;
+                }
+                durations[pose.Clip]++;
+                framesSeen[pose.Clip] |= 1u << pose.Clip.FrameAt(pose.Seconds);
+            }
+            var topRail = new TaskbarRail(new Drawing.Rectangle(-900, 0, 900, 600),
+                new Drawing.Rectangle(-900, 0, 900, 40), true, true, 52, 8);
+            var sideRail = new TaskbarRail(new Drawing.Rectangle(0, 0, 180, 140),
+                new Drawing.Rectangle(0, 0, 20, 140), false, true, 104, 8);
+            return stage == order.Length - 1 && framesSeen.Values.All(bits => bits == uint.MaxValue) &&
+                durations[DragonClip.Sleep] > durations.Values.Sum() / 2 &&
+                DragonMotion.At(DragonMotion.Duration, true).Clip == DragonClip.Sleep &&
+                CheckDragonFlightArea(rail, 0, 250) && CheckDragonFlightArea(rail, 1, 250) &&
+                CheckDragonFlightArea(topRail, .5, 250) && CheckDragonFlightArea(sideRail, .8, 56);
+        }
+
+        private static bool CheckDragonFlightArea(TaskbarRail rail, double perch, int expectedWidth)
+        {
+            var home = rail.Perch(false, perch, 0);
+            var previous = home;
+            int width = 0, flightHeight = 0;
+            for (int ms = 0; ms <= Math.Ceiling(DragonMotion.Duration * 1000); ms += 10)
+            {
+                var motion = DragonMotion.At(ms / 1000.0, true);
+                bool left;
+                var bounds = rail.DragonBounds(home, motion.Offset(), out left);
+                if (!rail.Area.Contains(bounds) || Math.Abs(bounds.X - previous.X) > 3 ||
+                    Math.Abs(bounds.Y - previous.Y) > 3) return false;
+                width = Math.Max(width, Math.Abs(bounds.X - home.X));
+                flightHeight = Math.Max(flightHeight, Math.Abs(bounds.Y - home.Y));
+                previous = bounds;
+            }
+            return width == expectedWidth && flightHeight > 0 && previous == home;
+        }
+
     }
 }
