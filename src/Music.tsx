@@ -19,8 +19,6 @@ class MusicPlayer {
   private skipped = new Set<string>();
   private scan?: Promise<void>;
 
-  constructor(private readonly available: boolean) {}
-
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
@@ -33,7 +31,6 @@ class MusicPlayer {
   }
 
   refresh = () => {
-    if (!this.available) return Promise.resolve();
     if (this.scan) return this.scan;
     this.scan = invoke<[string, string][]>('list_music')
       .then(files => {
@@ -117,8 +114,8 @@ class MusicPlayer {
   };
 }
 
-export function useMusic(available: boolean, open: boolean) {
-  const [player] = useState(() => new MusicPlayer(available));
+export function useMusic(open: boolean) {
+  const [player] = useState(() => new MusicPlayer());
   useEffect(() => {
     if (!open) return;
     void player.refresh();
@@ -142,7 +139,7 @@ export function Music({ player, back }: { player: MusicPlayer; back: () => void 
         <button className="panel-back" type="button" aria-label="Về cài đặt" title="Về cài đặt" onClick={back}>‹</button>
         <h1 id="music-title">Nhạc</h1>
       </header>
-      <div className="songs" aria-label="Danh sách nhạc">
+      <div className="songs" role="group" aria-label="Danh sách nhạc">
         {state.tracks.map(track => <button key={track.path} type="button" title={trackTitle(track)}
           aria-pressed={track.path === highlighted?.path} onClick={() => player.choose(track)}>{trackTitle(track)}</button>)}
       </div>

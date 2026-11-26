@@ -1,16 +1,23 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <SolidColorBrush x:Key="PanelCanvas" Color="#111C28" />
-  <SolidColorBrush x:Key="PanelInk" Color="#F8F2E7" />
-  <SolidColorBrush x:Key="PanelMuted" Color="#BAC9D4" />
-  <SolidColorBrush x:Key="PanelLine" Color="#7990A3" />
-  <SolidColorBrush x:Key="PanelDivider" Color="#324658" />
-  <SolidColorBrush x:Key="PanelField" Color="#1C2D3D" />
-  <SolidColorBrush x:Key="PanelHot" Color="#294054" />
-  <SolidColorBrush x:Key="PanelSelected" Color="#31485D" />
-  <SolidColorBrush x:Key="PanelGold" Color="#F8D48F" />
-  <SolidColorBrush x:Key="PanelOnGold" Color="#2F2318" />
-  <SolidColorBrush x:Key="PanelError" Color="#FFB5AA" />
+  <SolidColorBrush x:Key="PanelCanvas" Color="#1C151A" />
+  <SolidColorBrush x:Key="PanelInk" Color="#FAEEE2" />
+  <SolidColorBrush x:Key="PanelMuted" Color="#CEB9B3" />
+  <SolidColorBrush x:Key="PanelLine" Color="#94776C" />
+  <SolidColorBrush x:Key="PanelDivider" Color="#4D3941" />
+  <SolidColorBrush x:Key="PanelField" Color="#2B2028" />
+  <SolidColorBrush x:Key="PanelHot" Color="#3A2932" />
+  <SolidColorBrush x:Key="PanelSelected" Color="#4A333E" />
+  <SolidColorBrush x:Key="PanelGold" Color="#E6BE8A" />
+  <SolidColorBrush x:Key="PanelOnGold" Color="#2A1A1E" />
+  <SolidColorBrush x:Key="PanelError" Color="#FFC0BA" />
+
+  <LinearGradientBrush x:Key="PanelCalendar" StartPoint="0,1" EndPoint="1,0">
+    <GradientStop Color="#302229" Offset="0" />
+    <GradientStop Color="#392630" Offset=".65" />
+    <GradientStop Color="#51323B" Offset="1" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="PanelDatePaper" Color="#EED5B3" />
 
   <Style x:Key="SettingsTextInput" TargetType="{x:Type TextBox}">
     <Setter Property="Foreground" Value="{StaticResource PanelInk}" />
@@ -137,7 +144,7 @@
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type TabControl}">
           <DockPanel>
-            <Border DockPanel.Dock="Top" Margin="20,2,20,0" Padding="3" BorderThickness="1" CornerRadius="8"
+            <Border DockPanel.Dock="Top" Margin="20,0" Padding="4" BorderThickness="1" CornerRadius="9"
                     Background="{StaticResource PanelField}" BorderBrush="{StaticResource PanelDivider}">
               <UniformGrid Rows="1" IsItemsHost="True" KeyboardNavigation.TabNavigation="Once" />
             </Border>
@@ -151,16 +158,16 @@
 
   <Style x:Key="SettingsTab" TargetType="{x:Type TabItem}">
     <Setter Property="Foreground" Value="{StaticResource PanelInk}" />
-    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontSize" Value="14" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type TabItem}">
-          <Grid Height="35" Background="Transparent">
+          <Grid Height="39" Background="Transparent">
             <Border x:Name="TabFocus" Margin="1,0" BorderThickness="1" BorderBrush="Transparent" CornerRadius="5" />
             <ContentPresenter ContentSource="Header" Margin="4,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <Border x:Name="CurrentTab" Height="2" Margin="14,0,14,2" VerticalAlignment="Bottom" CornerRadius="1"
+            <Border x:Name="CurrentTab" Height="2" Margin="14,0,14,3" VerticalAlignment="Bottom" CornerRadius="1"
                     Background="{StaticResource PanelGold}" Visibility="Hidden" />
           </Grid>
           <ControlTemplate.Triggers>
@@ -218,7 +225,7 @@
   </Style>
 
   <Style x:Key="HolidayRow" TargetType="{x:Type CheckBox}">
-    <Setter Property="MinHeight" Value="38" />
+    <Setter Property="MinHeight" Value="40" />
     <Setter Property="Foreground" Value="{StaticResource PanelInk}" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="Template">
@@ -283,25 +290,23 @@
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ComboBox}">
           <Grid>
+            <Rectangle x:Name="ComboFrame" RadiusX="5" RadiusY="5" Margin="1" Fill="{StaticResource PanelField}"
+                       Stroke="{StaticResource PanelLine}" StrokeThickness="1.25" SnapsToDevicePixels="True"
+                       IsHitTestVisible="False" />
             <ToggleButton Focusable="False" ClickMode="Press" Cursor="Hand"
                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
               <ToggleButton.Template>
                 <ControlTemplate TargetType="{x:Type ToggleButton}">
-                  <Border x:Name="Field" Background="{StaticResource PanelField}" BorderBrush="{StaticResource PanelLine}"
-                          BorderThickness="1" CornerRadius="5" />
-                  <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Field" Property="Background" Value="{StaticResource PanelHot}" /></Trigger>
-                  </ControlTemplate.Triggers>
+                  <Border Background="Transparent" />
                 </ControlTemplate>
               </ToggleButton.Template>
             </ToggleButton>
-            <DockPanel IsHitTestVisible="False" Margin="5,0" LastChildFill="True">
+            <DockPanel IsHitTestVisible="False" Margin="6,0" LastChildFill="True">
               <Path DockPanel.Dock="Right" Width="7" Margin="4,0,1,0" VerticalAlignment="Center" Data="M0,0 L3.5,3.5 7,0"
                     Stroke="{StaticResource PanelGold}" StrokeThickness="1" />
               <TextBlock Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}}"
                          TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
             </DockPanel>
-            <Border x:Name="ComboFocus" BorderBrush="Transparent" BorderThickness="1" CornerRadius="5" IsHitTestVisible="False" />
             <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" Focusable="False" AllowsTransparency="True">
               <Border Margin="0,2,0,0" Background="{StaticResource PanelField}" BorderBrush="{StaticResource PanelLine}"
                       BorderThickness="1" CornerRadius="5" Padding="2" Width="{TemplateBinding ActualWidth}"
@@ -313,7 +318,8 @@
             </Popup>
           </Grid>
           <ControlTemplate.Triggers>
-            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboFocus" Property="BorderBrush" Value="{StaticResource PanelGold}" /></Trigger>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboFrame" Property="Fill" Value="{StaticResource PanelHot}" /></Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboFrame" Property="Stroke" Value="{StaticResource PanelGold}" /></Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>

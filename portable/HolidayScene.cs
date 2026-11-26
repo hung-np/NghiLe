@@ -1,8 +1,9 @@
 using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace NghiLe
 {
@@ -26,11 +27,13 @@ namespace NghiLe
         private static readonly Point DrumCenter = new Point(87, 28);
         private static readonly EllipseGeometry DrumFace = new EllipseGeometry(DrumCenter, 24, 24);
         private static readonly Lazy<Brush> DrumShine = new Lazy<Brush>(CreateDrumShine);
-        private static readonly DoubleAnimation PhaseCycle = CreatePhaseCycle();
-        private static readonly DependencyProperty PhaseProperty = DependencyProperty.Register(
-            "Phase", typeof(double), typeof(HolidayScene),
-            new PropertyMetadata(0.0, (target, args) => ((HolidayScene)target).Redraw()));
+        private const int CycleSeconds = 8;
+        private static readonly TimeSpan FrameInterval = TimeSpan.FromTicks(
+            (TimeSpan.TicksPerSecond + FramesPerSecond - 1) / FramesPerSecond);
+        private DispatcherTimer animation;
+        private long animationStart;
         private readonly DrawingVisual artwork = new DrawingVisual();
+        private readonly HolidayDiorama.Playback modelPlayback = new HolidayDiorama.Playback();
         private readonly bool preview;
         private Size artworkSize = Size.Empty;
         private Transform placement = Transform.Identity;
@@ -38,7 +41,9 @@ namespace NghiLe
         private bool moving;
         private bool celebrating;
         private bool apricotNewYear;
+        private bool use3D;
         private bool compact;
+        private bool pinsVisible;
         private bool horizontal;
 
         internal HolidayScene(bool preview = false)
@@ -75,23 +80,17 @@ namespace NghiLe
             placement = transform;
         }
 
-        private static DoubleAnimation CreatePhaseCycle()
+        internal void ShowTheme(HolidayTheme? value, bool apricot, bool model = false)
         {
-            var cycle = new DoubleAnimation(0, 1, TimeSpan.FromSeconds(8)) { RepeatBehavior = RepeatBehavior.Forever };
-            Timeline.SetDesiredFrameRate(cycle, FramesPerSecond);
-            cycle.Freeze();
-            return cycle;
-        }
-
-        internal void ShowTheme(HolidayTheme? value, bool apricot)
-        {
-            if (theme == value && apricotNewYear == apricot) return;
+            if (theme == value && apricotNewYear == apricot && use3D == model) return;
             theme = value;
             apricotNewYear = apricot;
+            use3D = model;
+            modelPlayback.Reset();
             Redraw();
         }
 
-        internal bool IsAnimating { get { return moving && HasAnimatedProperties; } }
+        internal bool IsAnimating { get { return moving && animation.IsEnabled; } }
         internal bool UsesApricot { get { return theme == HolidayTheme.LunarNewYear && apricotNewYear; } }
 
         internal void SetCompact(bool value)
@@ -99,6 +98,13 @@ namespace NghiLe
             if (compact == value) return;
             compact = value;
             Redraw();
+        }
+
+        internal void SetPinsVisible(bool visible)
+        {
+            if (pinsVisible == visible) return;
+            pinsVisible = visible;
+            if (PersonalDate.IsTheme(theme)) Redraw();
         }
 
         internal void SetCelebration(bool value)
@@ -113,8 +119,32 @@ namespace NghiLe
             enabled = enabled && theme.HasValue;
             if (enabled == moving) return;
             moving = enabled;
-            BeginAnimation(PhaseProperty, moving ? PhaseCycle : null);
+            if (moving)
+            {
+                if (animation == null)
+                {
+                    animation = new DispatcherTimer(DispatcherPriority.Render) { Interval = FrameInterval };
+                    animation.Tick += AdvanceAnimation;
+                }
+                animationStart = Stopwatch.GetTimestamp();
+                animation.Interval = FrameInterval;
+                animation.Start();
+            }
+            else
+            {
+                animation.Stop();
+                modelPlayback.Reset();
+            }
             Redraw();
+        }
+
+        private void AdvanceAnimation(object sender, EventArgs args)
+        {
+            long started = Stopwatch.GetTimestamp();
+            Redraw();
+            var drawTime = TimeSpan.FromSeconds((Stopwatch.GetTimestamp() - started) / (double)Stopwatch.Frequency);
+            animation.Interval = TimeSpan.FromTicks(Math.Max(TimeSpan.TicksPerMillisecond,
+                (FrameInterval - drawTime).Ticks));
         }
 
         private void Redraw()
@@ -127,12 +157,18 @@ namespace NghiLe
         private void RenderArtwork(DrawingContext drawing)
         {
             UpdatePlacement();
-            double phase = (double)GetValue(PhaseProperty);
+            double phase = moving
+                ? (Stopwatch.GetTimestamp() - animationStart) % (CycleSeconds * Stopwatch.Frequency) /
+                    (double)(CycleSeconds * Stopwatch.Frequency)
+                : 0;
             if (PersonalDate.IsTheme(theme))
             {
                 DrawPersonalArtwork(drawing, theme == HolidayTheme.Birthday, phase);
                 return;
             }
+            if (use3D && HolidayDiorama.Supports(theme) &&
+                HolidayDiorama.Draw(drawing, theme.Value, RenderSize, horizontal, compact, celebrating,
+                    apricotNewYear, moving ? modelPlayback : null, phase)) return;
             drawing.PushTransform(placement);
             if (theme == HolidayTheme.NewYear)
             {

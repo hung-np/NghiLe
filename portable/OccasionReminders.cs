@@ -9,7 +9,7 @@ namespace NghiLe
     {
         internal const int Off = -1;
         internal static readonly int[] Choices = { Off, 7, 1, 0 };
-        private static readonly TimeSpan ReminderTime = TimeSpan.FromHours(9);
+        internal static readonly TimeSpan ReminderTime = TimeSpan.FromHours(9);
 
         internal static string Label(int days)
         {
@@ -21,7 +21,7 @@ namespace NghiLe
         internal static string CountdownLabel(HolidayOccurrence occasion, DateTime today)
         {
             int days = (occasion.Date.Date - today).Days;
-            if (days < 0) return "Đang diễn ra";
+            if (days < 0) return occasion.LastDay.Date < today ? "Đã qua" : "Đang diễn ra";
             if (days == 0) return "Hôm nay";
             return "Còn " + days.ToString(CultureInfo.InvariantCulture) + " ngày";
         }
@@ -39,8 +39,7 @@ namespace NghiLe
                 int days;
                 if (!settings.ReminderDays.TryGetValue(occasion.Id, out days) ||
                     days != (occasion.Date.Date - local.Date).Days) continue;
-                string key = day + "|" + occasion.Id + "|" +
-                    occasion.Date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                string key = day + "|" + occasion.Key;
                 if (!delivered.Contains(key)) due.Add(key, occasion);
             }
             return due;

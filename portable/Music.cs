@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -19,6 +21,7 @@ namespace NghiLe
         private readonly double volume;
         private MediaPlayer player;
 
+        internal string Folder { get { return folder; } }
         internal string[] Tracks { get; private set; }
         internal string Selected { get; private set; }
         internal string Current { get; private set; }
@@ -106,22 +109,9 @@ namespace NghiLe
             Playing = true;
             var next = new MediaPlayer { Volume = volume };
             player = next;
-            next.MediaOpened += (s, e) =>
-            {
-                if (next != player) return;
-                Opened = true;
-                Notify();
-            };
-            next.MediaEnded += (s, e) =>
-            {
-                if (next == player) Advance(false);
-            };
-            next.MediaFailed += (s, e) =>
-            {
-                if (next != player) return;
-                PlaybackDiagnostic = e.ErrorException == null ? "MediaFailed" : e.ErrorException.ToString();
-                Advance(true);
-            };
+            next.MediaOpened += PlayerOpened;
+            next.MediaEnded += PlayerEnded;
+            next.MediaFailed += PlayerFailed;
             try
             {
                 next.Open(new Uri(path, UriKind.Absolute));
@@ -131,6 +121,25 @@ namespace NghiLe
             catch (IOException error) { PlaybackDiagnostic = error.ToString(); Advance(true); }
             catch (InvalidOperationException error) { PlaybackDiagnostic = error.ToString(); Advance(true); }
             catch (NotSupportedException error) { PlaybackDiagnostic = error.ToString(); Advance(true); }
+        }
+
+        private void PlayerOpened(object sender, EventArgs args)
+        {
+            if (sender != player) return;
+            Opened = true;
+            Notify();
+        }
+
+        private void PlayerEnded(object sender, EventArgs args)
+        {
+            if (sender == player) Advance(false);
+        }
+
+        private void PlayerFailed(object sender, ExceptionEventArgs args)
+        {
+            if (sender != player) return;
+            PlaybackDiagnostic = args.ErrorException == null ? "MediaFailed" : args.ErrorException.ToString();
+            Advance(true);
         }
 
         private void Advance(bool failed)
@@ -169,7 +178,11 @@ namespace NghiLe
             var previous = player;
             player = null;
             Opened = false;
-            if (previous != null) previous.Close();
+            if (previous == null) return;
+            previous.MediaOpened -= PlayerOpened;
+            previous.MediaEnded -= PlayerEnded;
+            previous.MediaFailed -= PlayerFailed;
+            previous.Close();
         }
 
         public void Dispose() { ClosePlayer(); }
@@ -193,7 +206,14 @@ namespace NghiLe
         private readonly ListBox songs;
         private readonly Button toggle;
         private readonly TextBlock status;
+        private static readonly TimeSpan ChangeDelay = TimeSpan.FromMilliseconds(120);
+        private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
         private readonly DispatcherTimer refresh;
+        private FileSystemWatcher parentWatcher;
+        private FileSystemWatcher trackWatcher;
+        private int refreshQueued;
+        private int restartWatchers;
+        private bool disposed;
         private string[] displayed;
         private bool rendering;
 
@@ -224,15 +244,101 @@ namespace NghiLe
             footer.Children.Add(toggle);
             SetContent(songs, footer);
 
-            refresh = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            refresh.Tick += (s, e) => playlist.Rescan();
+            refresh = new DispatcherTimer(DispatcherPriority.Background);
+            refresh.Tick += (s, e) => RefreshTracks();
             IsVisibleChanged += (s, e) =>
             {
-                if (IsVisible) { playlist.Rescan(); refresh.Start(); }
-                else refresh.Stop();
+                if (disposed) return;
+                if (IsVisible)
+                {
+                    Interlocked.Exchange(ref restartWatchers, 1);
+                    RefreshTracks();
+                }
+                else StopWatching();
             };
             playlist.Changed += Render;
             Render();
+        }
+
+        private void RefreshTracks()
+        {
+            refresh.Stop();
+            Interlocked.Exchange(ref refreshQueued, 0);
+            if (!IsVisible || disposed) return;
+
+            if (Interlocked.Exchange(ref restartWatchers, 0) != 0)
+            {
+                ReleaseWatchers();
+                try
+                {
+                    // The parent watch detects recreation and moves of nhac itself.
+                    parentWatcher = Watch(Path.GetDirectoryName(playlist.Folder), Path.GetFileName(playlist.Folder),
+                        NotifyFilters.DirectoryName, true);
+                    if (Directory.Exists(playlist.Folder))
+                        trackWatcher = Watch(playlist.Folder, "*", NotifyFilters.FileName, false);
+                }
+                catch (IOException) { RetryWatching(); }
+                catch (UnauthorizedAccessException) { RetryWatching(); }
+                catch (ArgumentException) { RetryWatching(); }
+                catch (Win32Exception) { RetryWatching(); }
+            }
+            playlist.Rescan();
+        }
+
+        private FileSystemWatcher Watch(string folder, string filter, NotifyFilters changes, bool restart)
+        {
+            var watcher = new FileSystemWatcher(folder, filter) { NotifyFilter = changes };
+            FileSystemEventHandler changed = (s, e) => QueueRefresh(restart);
+            watcher.Created += changed;
+            watcher.Deleted += changed;
+            watcher.Renamed += (s, e) => QueueRefresh(restart);
+            watcher.Error += (s, e) => QueueRefresh(true);
+            try
+            {
+                watcher.EnableRaisingEvents = true;
+                return watcher;
+            }
+            catch
+            {
+                watcher.Dispose();
+                throw;
+            }
+        }
+
+        private void QueueRefresh(bool restart)
+        {
+            if (restart) Interlocked.Exchange(ref restartWatchers, 1);
+            if (Interlocked.Exchange(ref refreshQueued, 1) != 0) return;
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                if (!IsVisible || disposed) return;
+                refresh.Stop();
+                refresh.Interval = ChangeDelay;
+                refresh.Start();
+            }));
+        }
+
+        private void RetryWatching()
+        {
+            ReleaseWatchers();
+            Interlocked.Exchange(ref restartWatchers, 1);
+            refresh.Interval = RetryDelay;
+            refresh.Start();
+        }
+
+        private void ReleaseWatchers()
+        {
+            if (trackWatcher != null) trackWatcher.Dispose();
+            if (parentWatcher != null) parentWatcher.Dispose();
+            trackWatcher = null;
+            parentWatcher = null;
+        }
+
+        private void StopWatching()
+        {
+            refresh.Stop();
+            ReleaseWatchers();
         }
 
         private void Render()
@@ -265,7 +371,8 @@ namespace NghiLe
 
         public void Dispose()
         {
-            refresh.Stop();
+            disposed = true;
+            StopWatching();
             playlist.Changed -= Render;
         }
     }

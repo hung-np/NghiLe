@@ -40,11 +40,12 @@ namespace NghiLe
             ActionFrames(PetAction.Stretch, 28), ActionFrames(PetAction.Hop, 14), ActionFrames(PetAction.Nap, 48)
         };
 
+        private static readonly Lazy<DrawingGroup[]> CatNuzzle = new Lazy<DrawingGroup[]>(CreateNuzzleFrames);
+
+        private static readonly Lazy<DrawingGroup[]> HacLongWalk = new Lazy<DrawingGroup[]>(LoadHacLongWalk);
+
         private DrawingGroup drawing = Poses[0][0];
-        private DragonClip dragonClip;
-        private BitmapSource[] dragonFrames;
-        private int dragonIndex;
-        private double dragonProfile = 1;
+        private double canvasHeight = CanvasHeight;
         private bool mirrorFrame;
 
         internal bool GroundAtBottom { get; set; }
@@ -53,7 +54,7 @@ namespace NghiLe
         {
             if (nextAnimal == PetAnimal.HacLong)
             {
-                SetDragonPose(lifted ? DragonClip.Fly : DragonClip.Sleep, 0, left);
+                SetDrawing(HacLongWalk.Value[0], left, CanvasWidth);
                 return;
             }
             int nextPose = lifted ? 5 : moving ? 1 + frame % 4 : 0;
@@ -62,6 +63,14 @@ namespace NghiLe
 
         internal void SetMotion(PetAnimal animal, PetMotion motion, bool left)
         {
+            if (animal == PetAnimal.HacLong)
+            {
+                // The original walk repeats an 80 ms, 40 ms, 40 ms cadence.
+                int beat = (int)(motion.Progress * 20);
+                int frame = (beat / 4) * 3 + Math.Max(0, beat % 4 - 1);
+                SetDrawing(HacLongWalk.Value[frame], left, CanvasWidth);
+                return;
+            }
             if (animal != PetAnimal.Dog || motion.Action <= PetAction.Walk)
             {
                 SetPose(animal, motion.Action == PetAction.Walk, (int)(motion.Progress * 40), left);
@@ -71,11 +80,40 @@ namespace NghiLe
             SetDrawing(frames[Math.Min(frames.Length - 1, (int)(motion.Progress * frames.Length))], left);
         }
 
+        internal void SetPettingPose(PetAnimal animal, double progress, bool left)
+        {
+            if (animal == PetAnimal.HacLong)
+            {
+                SetPose(animal, left: left);
+                return;
+            }
+            var frames = animal == PetAnimal.Dog ? DogActions[0] : CatNuzzle.Value;
+            SetDrawing(frames[Math.Min(frames.Length - 1, (int)(progress * frames.Length))], left);
+        }
+
+        private static DrawingGroup[] CreateNuzzleFrames()
+        {
+            var frames = new DrawingGroup[18];
+            for (int index = 0; index < frames.Length; index++)
+            {
+                var frame = new DrawingGroup();
+                double phase = index / (double)(frames.Length - 1);
+                using (var context = frame.Open())
+                {
+                    context.DrawEllipse(Shadow, null, new Point(18, 28.8), 14.3, 1);
+                    DrawPet(context, false, 0, nuzzle: Math.Sin(Math.PI * phase) * Math.Sin(4 * Math.PI * phase), contented: true);
+                }
+                frame.Freeze();
+                frames[index] = frame;
+            }
+            return frames;
+        }
+
         internal void SetCarryPose(PetAnimal animal, double seconds, bool left)
         {
             if (animal == PetAnimal.HacLong)
             {
-                SetDragonPose(DragonClip.Fly, seconds, left);
+                SetPose(animal, left: left);
                 return;
             }
             var frames = Carried[(int)animal];
@@ -84,48 +122,42 @@ namespace NghiLe
             SetDrawing(frames[index], left);
         }
 
-        private void SetDrawing(DrawingGroup frame, bool mirror)
+        private static DrawingGroup[] LoadHacLongWalk()
         {
-            if (dragonClip == null && drawing == frame && mirrorFrame == mirror) return;
-            dragonClip = null;
-            dragonFrames = null;
-            drawing = frame;
-            mirrorFrame = mirror;
-            InvalidateVisual();
+            using (var stream = typeof(PetArtwork).Assembly.GetManifestResourceStream("NghiLe.HacLongWalk"))
+            {
+                var atlas = BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                const int cell = 256;
+                const int columns = 5;
+                var frames = new DrawingGroup[15];
+                for (int index = 0; index < frames.Length; index++)
+                {
+                    var region = new Int32Rect(index % columns * cell, index / columns * cell, cell, cell);
+                    var image = new CroppedBitmap(atlas, region);
+                    var frame = new DrawingGroup();
+                    using (var context = frame.Open())
+                        context.DrawImage(image, new Rect(0, 0, CanvasWidth, CanvasWidth));
+                    frame.Freeze();
+                    frames[index] = frame;
+                }
+                return frames;
+            }
         }
 
-        internal void SetDragonPose(DragonClip clip, double seconds, bool left, double profile = 1)
+        private void SetDrawing(DrawingGroup frame, bool mirror, double height = CanvasHeight)
         {
-            int index = clip.FrameAt(seconds);
-            bool mirror = !left;
-            if (dragonClip == clip && dragonIndex == index && mirrorFrame == mirror && dragonProfile == profile) return;
-            if (dragonClip != clip) dragonFrames = clip.LoadFrames();
-            dragonClip = clip;
-            dragonIndex = index;
-            dragonProfile = profile;
+            if (drawing == frame && mirrorFrame == mirror) return;
+            drawing = frame;
             mirrorFrame = mirror;
+            canvasHeight = height;
             InvalidateVisual();
         }
 
         protected override void OnRender(DrawingContext context)
         {
-            if (dragonClip != null)
-            {
-                double zoom = Math.Min(RenderSize.Width / DragonClip.Width, RenderSize.Height / DragonClip.Height);
-                zoom *= dragonClip.ArtworkScale(dragonIndex);
-                if (zoom <= 0) return;
-                double top = GroundAtBottom ? RenderSize.Height - dragonClip.GroundLine * zoom :
-                    (RenderSize.Height - DragonClip.Height * zoom) / 2;
-                double width = DragonClip.Width * zoom * dragonProfile;
-                var target = new Rect((RenderSize.Width - width) / 2, top, width, DragonClip.Height * zoom);
-                if (mirrorFrame) context.PushTransform(new ScaleTransform(-1, 1, RenderSize.Width / 2, 0));
-                context.DrawImage(dragonFrames[dragonIndex], target);
-                if (mirrorFrame) context.Pop();
-                return;
-            }
-            double scale = Math.Min(RenderSize.Width / CanvasWidth, RenderSize.Height / CanvasHeight);
+            double scale = Math.Min(RenderSize.Width / CanvasWidth, RenderSize.Height / canvasHeight);
             if (scale <= 0) return;
-            double spareHeight = RenderSize.Height - CanvasHeight * scale;
+            double spareHeight = RenderSize.Height - canvasHeight * scale;
             context.PushTransform(new TranslateTransform((RenderSize.Width - CanvasWidth * scale) / 2,
                 GroundAtBottom ? spareHeight : spareHeight / 2));
             context.PushTransform(new ScaleTransform(scale, scale));
@@ -273,7 +305,7 @@ namespace NghiLe
         }
 
         private static void DrawPet(DrawingContext context, bool dog, int pose, double wag = 0,
-            double paddle = 0, double tuck = 0)
+            double paddle = 0, double tuck = 0, double nuzzle = 0, bool contented = false)
         {
             bool lifted = pose == 5;
             bool moving = pose != 0 && !lifted;
@@ -330,6 +362,7 @@ namespace NghiLe
                 context.DrawLine(Fine, new Point(25, 27.2), new Point(25, 28.1));
             }
 
+            if (contented) context.PushTransform(new RotateTransform(nuzzle * 17, 22, 19));
             if (!dog)
             {
                 Shape(context, coat, Edge, new Point(17, 12 + bob), new Point(18, 4 + bob), new Point(23, 8.5 + bob),
@@ -359,9 +392,14 @@ namespace NghiLe
                 context.DrawLine(Stripe, new Point(27, 8.9 + bob), new Point(26.6, 10.7 + bob));
             }
             context.DrawEllipse(cream, dog ? Fine : null, new Point(29.4, 17.3 + bob), 4.75, 2.85);
-            context.DrawEllipse(dog ? Outline : CatEye, Fine, new Point(27, 13.2 + bob), lifted ? 1.57 : 1.35, 1.68);
-            if (!dog) context.DrawEllipse(Outline, null, new Point(27.35, 13.2 + bob), .62, 1.15);
-            context.DrawEllipse(Glint, null, new Point(26.65, 12.55 + bob), .46, .48);
+            if (contented) Curve(context, Fine, new Point(25.6, 13.4), new Point(26.2, 12.5),
+                new Point(27.5, 12.5), new Point(28.3, 13.4));
+            else
+            {
+                context.DrawEllipse(dog ? Outline : CatEye, Fine, new Point(27, 13.2 + bob), lifted ? 1.57 : 1.35, 1.68);
+                if (!dog) context.DrawEllipse(Outline, null, new Point(27.35, 13.2 + bob), .62, 1.15);
+                context.DrawEllipse(Glint, null, new Point(26.65, 12.55 + bob), .46, .48);
+            }
             context.DrawEllipse(dog ? Outline : Pink, Fine, new Point(32.8, 16.35 + bob), 1.42, .96);
             if (lifted) context.DrawEllipse(Outline, null, new Point(30.6, 19.1 + bob), .62, .76);
             else Curve(context, Fine, new Point(32.45, 17.16 + bob), new Point(32.1, 19.15 + bob),
@@ -376,6 +414,7 @@ namespace NghiLe
                 context.DrawLine(Fine, new Point(29, 17.3 + bob), new Point(24.8, 16.4 + bob));
                 context.DrawLine(Fine, new Point(29, 18.2 + bob), new Point(24.5, 18.7 + bob));
             }
+            if (contented) context.Pop();
         }
 
         private static void Leg(DrawingContext context, Brush coat, Brush paw, double origin, double shift, double lift)

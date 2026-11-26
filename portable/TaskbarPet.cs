@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -33,6 +35,7 @@ namespace NghiLe
         internal static PetMotion At(PetAnimal animal, double seconds, bool enabled)
         {
             if (!enabled) return default(PetMotion);
+            if (animal == PetAnimal.HacLong) return new PetMotion(PetAction.Walk, seconds % .8 / .8);
             double phase = seconds % (animal == PetAnimal.Dog ? 48 : 40);
             if (phase < 4) return new PetMotion(PetAction.Walk, phase / 4);
             if (animal == PetAnimal.Dog)
@@ -81,7 +84,23 @@ namespace NghiLe
             int anchor = chosen.HasValue ? (int)Math.Round(Span * chosen.Value) : atEnd ? Span - inset : inset;
             int direction = anchor <= Span / 2 ? 1 : -1;
             int distance = Math.Min(Size * 2, direction == 1 ? Span - anchor : anchor);
-            int along = Start + anchor + (int)Math.Round(motion * distance) * direction;
+            return OnRail(anchor + (int)Math.Round(motion * distance) * direction);
+        }
+
+        internal Drawing.Rectangle Patrol(double distance, double start, out bool returning)
+        {
+            double span = Span;
+            returning = false;
+            if (span <= 0) return OnRail(0);
+
+            double phase = (distance + span * start) % (span * 2);
+            returning = phase >= span;
+            return OnRail((int)Math.Round(returning ? span * 2 - phase : phase));
+        }
+
+        private Drawing.Rectangle OnRail(int offset)
+        {
+            int along = Start + offset;
             if (Horizontal) return new Drawing.Rectangle(along, leadingEdge ? Area.Top : Area.Bottom - Size, Size, Size);
             return new Drawing.Rectangle(leadingEdge ? Area.Left : Area.Right - Size, along, Size, Size);
         }
@@ -90,19 +109,6 @@ namespace NghiLe
         {
             return new Drawing.Rectangle(Math.Max(Area.Left, Math.Min(Area.Right - Size, x)),
                 Math.Max(Area.Top, Math.Min(Area.Bottom - Size, y)), Size, Size);
-        }
-
-        internal Drawing.Rectangle DragonBounds(Drawing.Rectangle home, Vector offset, out bool outboundLeft)
-        {
-            int leftRoom = home.Left - Area.Left, rightRoom = Area.Right - home.Right;
-            int above = home.Top - Area.Top, below = Area.Bottom - home.Bottom;
-            outboundLeft = leftRoom > rightRoom;
-            bool upward = above >= DragonMotion.FlightCeiling || above >= below;
-            double width = Math.Min(1, (double)Math.Max(leftRoom, rightRoom) / DragonMotion.FlightWidth);
-            double height = Math.Min(1, (double)(upward ? above : below) / DragonMotion.FlightCeiling);
-            home.Offset((int)Math.Round(offset.X * width) * (outboundLeft ? -1 : 1),
-                (int)Math.Round(offset.Y * height) * (upward ? -1 : 1));
-            return home;
         }
 
         internal double PerchFraction(Drawing.Rectangle bounds)
@@ -128,10 +134,13 @@ namespace NghiLe
         private static readonly IntPtr TopmostWindow = new IntPtr(-1);
         private static readonly TimeSpan RestTick = TimeSpan.FromMilliseconds(200);
         private static readonly TimeSpan RunTick = TimeSpan.FromMilliseconds(84);
+        private static readonly TimeSpan HacLongWalkTick = TimeSpan.FromMilliseconds(33);
         private static readonly TimeSpan DragTick = TimeSpan.FromMilliseconds(16);
         internal static readonly int[] DelayOptions = { 1, 5, 15 };
         internal const int DefaultDelay = 5;
         private const int DefaultSize = 52;
+        internal const int MaxNameLength = 28;
+        private const double PettingSeconds = 1.8;
         internal const int MinimumSizePercent = 50;
         internal const int DefaultSizePercent = 100;
         internal const int MaximumSizePercent = 200;
@@ -141,10 +150,14 @@ namespace NghiLe
         private readonly Stopwatch playTime = new Stopwatch();
         private readonly Stopwatch carriedTime = new Stopwatch();
         private readonly Stopwatch falling = new Stopwatch();
+        private readonly Stopwatch petting = new Stopwatch();
         private readonly PetArtwork artwork = new PetArtwork { GroundAtBottom = true };
         private IntPtr handle;
         private Drawing.Rectangle lastBounds;
+        private Drawing.Point? pressOrigin;
         private Drawing.Point? grabOffset;
+        private Popup namePopup;
+        private TextBlock nameLabel;
         private int grabHeadingX;
         private Drawing.Rectangle dropOrigin;
         private double? perch;
@@ -176,6 +189,29 @@ namespace NghiLe
 
         internal bool IsRunning { get { return timer.IsEnabled; } }
 
+        internal static string SpeciesName(PetAnimal animal)
+        {
+            switch (animal)
+            {
+                case PetAnimal.Dog: return "Chó";
+                case PetAnimal.HacLong: return "Hắc Long";
+                default: return "Mèo";
+            }
+        }
+
+        internal static string NormalizeName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "";
+            var name = new StringBuilder(MaxNameLength);
+            foreach (char character in value.Trim())
+            {
+                if (!char.IsControl(character)) name.Append(character);
+                if (name.Length == MaxNameLength) break;
+            }
+            if (name.Length > 0 && char.IsHighSurrogate(name[name.Length - 1])) name.Length--;
+            return name.ToString().Trim();
+        }
+
         internal static int NormalizeDelay(int minutes)
         {
             return Array.IndexOf(DelayOptions, minutes) >= 0 ? minutes : DefaultDelay;
@@ -194,7 +230,6 @@ namespace NghiLe
         internal void Start()
         {
             if (IsRunning) return;
-            if (settings.PetAnimal == PetAnimal.HacLong) facingLeft = true;
             timer.Interval = RestTick;
             Refresh();
             timer.Start();
@@ -214,6 +249,15 @@ namespace NghiLe
 
         internal void ResetPerch() { perch = null; }
 
+        internal void ResetRoute()
+        {
+            perch = null;
+            playTime.Reset();
+            falling.Reset();
+            restAfterDrop = facingLeft = false;
+            CancelPetting();
+        }
+
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
@@ -231,11 +275,11 @@ namespace NghiLe
                     return new IntPtr(DoNotActivate);
                 case LeftButtonDown:
                     if (!IsRunning) break;
-                    BeginGrab(Forms.Cursor.Position);
+                    BeginPress(Forms.Cursor.Position);
                     handled = true;
                     break;
                 case LeftButtonUp:
-                    if (!grabOffset.HasValue) break;
+                    if (!pressOrigin.HasValue && !grabOffset.HasValue) break;
                     Refresh(Forms.Cursor.Position, false);
                     handled = true;
                     break;
@@ -246,13 +290,74 @@ namespace NghiLe
         private void Conceal()
         {
             playTime.Stop();
+            CancelPetting();
+            pressOrigin = null;
+            grabOffset = null;
+            carriedTime.Reset();
+            Cursor = Cursors.Hand;
             timer.Interval = RestTick;
             if (IsVisible) Hide();
+        }
+
+        private void BeginPress(Drawing.Point pointer)
+        {
+            if (pressOrigin.HasValue || grabOffset.HasValue) return;
+            CancelPetting();
+            pressOrigin = pointer;
+            falling.Reset();
+            playTime.Stop();
+            timer.Interval = DragTick;
+        }
+
+        private bool UpdatePress(Drawing.Point pointer, bool held)
+        {
+            var origin = pressOrigin.Value;
+            var dragSize = Forms.SystemInformation.DragSize;
+            if (Math.Abs(pointer.X - origin.X) >= Math.Max(2, dragSize.Width / 2) ||
+                Math.Abs(pointer.Y - origin.Y) >= Math.Max(2, dragSize.Height / 2))
+            {
+                pressOrigin = null;
+                BeginGrab(origin);
+                return false;
+            }
+            if (held) return true;
+
+            pressOrigin = null;
+            if (lastBounds.Contains(pointer)) petting.Restart();
+            return false;
+        }
+
+        private void ShowPetName()
+        {
+            if (!IsVisible) return;
+            if (namePopup == null)
+            {
+                nameLabel = new TextBlock { FontFamily = new FontFamily("Segoe UI"), FontSize = 13,
+                    FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
+                nameLabel.SetResourceReference(TextBlock.ForegroundProperty, "PanelInk");
+                var labelFrame = new Border { Child = nameLabel, MaxWidth = 200, CornerRadius = new CornerRadius(5),
+                    Padding = new Thickness(8, 3, 8, 4), BorderThickness = new Thickness(1), IsHitTestVisible = false };
+                labelFrame.Resources.MergedDictionaries.Add(PanelPage.LoadTheme());
+                labelFrame.SetResourceReference(Border.BackgroundProperty, "PanelCanvas");
+                labelFrame.SetResourceReference(Border.BorderBrushProperty, "PanelLine");
+                namePopup = new Popup { Child = labelFrame, PlacementTarget = artwork, Placement = PlacementMode.Top,
+                    AllowsTransparency = true, StaysOpen = true, IsHitTestVisible = false };
+            }
+            var name = string.IsNullOrEmpty(settings.PetName) ? SpeciesName(settings.PetAnimal) : settings.PetName;
+            if (nameLabel.Text != name) nameLabel.Text = name;
+            if (!namePopup.IsOpen) namePopup.IsOpen = true;
+        }
+
+        private void CancelPetting()
+        {
+            petting.Reset();
+            if (namePopup != null && namePopup.IsOpen) namePopup.IsOpen = false;
         }
 
         private void BeginGrab(Drawing.Point pointer)
         {
             if (grabOffset.HasValue) return;
+            CancelPetting();
             grabOffset = new Drawing.Point(pointer.X - lastBounds.Left, pointer.Y - lastBounds.Top);
             grabHeadingX = pointer.X;
             falling.Reset();
@@ -292,7 +397,7 @@ namespace NghiLe
         private void Refresh()
         {
             // A window that leaves focus with the user's app cannot rely on retaining mouse capture.
-            bool held = grabOffset.HasValue &&
+            bool held = (pressOrigin.HasValue || grabOffset.HasValue) &&
                 (GetAsyncKeyState(Forms.SystemInformation.MouseButtonsSwapped ? 2 : 1) & 0x8000) != 0;
             Refresh(Forms.Cursor.Position, held);
         }
@@ -308,6 +413,7 @@ namespace NghiLe
             }
 
             bool allowMotion = settings.Motion && SystemParameters.ClientAreaAnimation;
+            if (pressOrigin.HasValue && UpdatePress(pointer, held)) return;
             if (grabOffset.HasValue)
             {
                 UpdateGrab(rail, pointer, held, allowMotion);
@@ -321,31 +427,42 @@ namespace NghiLe
                 return;
             }
 
+            if (petting.IsRunning)
+            {
+                double progress = petting.Elapsed.TotalSeconds / PettingSeconds;
+                if (progress < 1)
+                {
+                    timer.Interval = allowMotion && settings.PetAnimal != PetAnimal.HacLong ? RunTick : RestTick;
+                    artwork.SetPettingPose(settings.PetAnimal, allowMotion ? progress : 0.25, facingLeft);
+                    ShowPetName();
+                    return;
+                }
+                CancelPetting();
+            }
+
             if (falling.IsRunning)
             {
                 if (allowMotion && ShowFall(rail, home)) return;
                 falling.Reset();
             }
 
-            bool hover = settings.PetAnimal != PetAnimal.HacLong && IsVisible && lastBounds.Contains(pointer);
+            bool hover = IsVisible && lastBounds.Contains(pointer);
             if (hover) playTime.Stop();
             else playTime.Start();
-            if (settings.PetAnimal == PetAnimal.HacLong)
+            bool homeAtEnd = rail.PerchFraction(home) > .5;
+            bool hacLong = settings.PetAnimal == PetAnimal.HacLong;
+            double time = playTime.Elapsed.TotalSeconds;
+            var motion = PetMotion.At(settings.PetAnimal, time + (restAfterDrop && !hacLong ? 4 : 0),
+                settings.PetRoams && allowMotion);
+            bool walking = motion.Action == PetAction.Walk;
+            if (hacLong && walking)
             {
-                bool animated = settings.PetRoams && allowMotion;
-                var dragon = DragonMotion.At(playTime.Elapsed.TotalSeconds, animated);
-                bool outboundLeft;
-                var bounds = rail.DragonBounds(home, dragon.Offset(), out outboundLeft);
-                if (animated) facingLeft = dragon.FacingOutward >= .5 ? outboundLeft : !outboundLeft;
-                artwork.SetDragonPose(dragon.Clip, dragon.Seconds, facingLeft, dragon.ProfileWidth);
-                timer.Interval = animated ? dragon.Clip.NextTick(dragon.Seconds) : RestTick;
+                timer.Interval = hover ? RestTick : HacLongWalkTick;
+                var bounds = rail.Patrol(time * rail.Size * .9, perch.GetValueOrDefault(), out facingLeft);
+                artwork.SetMotion(settings.PetAnimal, motion, facingLeft);
                 Present(bounds);
                 return;
             }
-            bool homeAtEnd = rail.PerchFraction(home) > .5;
-            double time = playTime.Elapsed.TotalSeconds + (restAfterDrop ? 4 : 0);
-            var motion = PetMotion.At(settings.PetAnimal, time, settings.PetRoams && allowMotion);
-            bool walking = motion.Action == PetAction.Walk;
             timer.Interval = motion.Action != PetAction.Rest && !hover ? RunTick : RestTick;
             var boundsOnRail = walking
                 ? rail.Perch(settings.PetAtEnd, perch, Math.Sin(Math.PI * motion.Progress))
@@ -353,6 +470,37 @@ namespace NghiLe
             if (walking || !restAfterDrop) facingLeft = (walking && motion.Progress >= .5) != homeAtEnd;
             artwork.SetMotion(settings.PetAnimal, motion, facingLeft);
             Present(boundsOnRail);
+        }
+
+        internal bool CheckPettingInteraction()
+        {
+            if (!IsVisible) return false;
+            var point = new Drawing.Point(lastBounds.Left + lastBounds.Width / 2, lastBounds.Top + lastBounds.Height / 2);
+            var animal = settings.PetAnimal;
+            try
+            {
+                foreach (var species in new[] { PetAnimal.HacLong, PetAnimal.Dog, PetAnimal.Cat })
+                {
+                    settings.PetAnimal = species;
+                    BeginPress(point);
+                    Refresh(point, true);
+                    if (!pressOrigin.HasValue || grabOffset.HasValue || petting.IsRunning) return false;
+                    Refresh(point, false);
+                    if (!petting.IsRunning || namePopup == null || !namePopup.IsOpen ||
+                        nameLabel.Text != settings.PetName || grabOffset.HasValue) return false;
+                }
+                BeginPress(point);
+                var moved = new Drawing.Point(point.X + Forms.SystemInformation.DragSize.Width + 10, point.Y);
+                Refresh(moved, true);
+                if (!grabOffset.HasValue || petting.IsRunning || namePopup.IsOpen) return false;
+                Refresh(moved, false);
+                return !grabOffset.HasValue && !petting.IsRunning;
+            }
+            finally
+            {
+                settings.PetAnimal = animal;
+                CancelPetting();
+            }
         }
 
         private bool ShowFall(TaskbarRail rail, Drawing.Rectangle home)
@@ -366,9 +514,7 @@ namespace NghiLe
             var bounds = rail.Clamp(dropOrigin.Left + (int)Math.Round((home.Left - dropOrigin.Left) * ease),
                 dropOrigin.Top + (int)Math.Round((home.Top - dropOrigin.Top) * ease));
             timer.Interval = DragTick;
-            if (settings.PetAnimal == PetAnimal.HacLong)
-                artwork.SetCarryPose(settings.PetAnimal, carriedTime.Elapsed.TotalSeconds + falling.Elapsed.TotalSeconds, facingLeft);
-            else artwork.SetPose(settings.PetAnimal, left: facingLeft, lifted: true);
+            artwork.SetPose(settings.PetAnimal, left: facingLeft, lifted: true);
             Present(bounds);
             return true;
         }

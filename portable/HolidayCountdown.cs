@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace NghiLe
@@ -17,6 +18,11 @@ namespace NghiLe
         internal readonly string Name;
         internal readonly DateTimeOffset Date;
         internal readonly DateTimeOffset LastDay;
+
+        internal string Key
+        {
+            get { return Id + "|" + Date.ToString("yyyyMMdd", CultureInfo.InvariantCulture); }
+        }
 
         internal HolidayOccurrence(HolidayTheme theme, string id, string name, DateTimeOffset date, DateTimeOffset lastDay)
         {
@@ -44,6 +50,9 @@ namespace NghiLe
         {
             HolidayOccurrence? next = null;
             HolidayOccurrence? fixedTet = null;
+            HolidayOccurrence? personalToday = null;
+            HolidayOccurrence? pinned = null;
+            int firstPin = settings.PinnedOccasionIds.Length;
             foreach (var occurrence in Tracked(settings, local))
             {
                 if (occurrence.LastDay.Date < local.Date)
@@ -51,12 +60,20 @@ namespace NghiLe
                     fixedTet = occurrence;
                     continue;
                 }
-                // Give a personal date its own greeting even during a multi-day holiday.
-                if (occurrence.Date.Date == local.Date && PersonalDate.IsTheme(occurrence.Theme))
+                if (settings.DisplayedOccurrenceKey != null && occurrence.Key == settings.DisplayedOccurrenceKey)
                     return occurrence;
+                // In automatic mode give the first personal date today its own greeting.
+                if (!personalToday.HasValue && occurrence.Date.Date == local.Date && PersonalDate.IsTheme(occurrence.Theme))
+                    personalToday = occurrence;
+                int pin = Array.IndexOf(settings.PinnedOccasionIds, occurrence.Id);
+                if (pin >= 0 && pin < firstPin)
+                {
+                    pinned = occurrence;
+                    firstPin = pin;
+                }
                 if (!next.HasValue || occurrence.Date < next.Value.Date) next = occurrence;
             }
-            return next ?? fixedTet;
+            return personalToday ?? pinned ?? next ?? fixedTet;
         }
 
         internal static IEnumerable<HolidayOccurrence> UpcomingTracked(Settings settings, DateTimeOffset local)

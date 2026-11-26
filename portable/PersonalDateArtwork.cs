@@ -25,7 +25,8 @@ namespace NghiLe
         {
             bool wideWidget = horizontal && !preview;
             double width = preview ? Math.Min(ActualWidth - 14, (ActualHeight - 14) * 2.08) :
-                wideWidget ? 110 : compact && !celebrating ? 150 : celebrating ? 182 : 174;
+                wideWidget ? 110 : pinsVisible ? (celebrating ? 158 : compact ? 128 : 138) :
+                compact && !celebrating ? 150 : celebrating ? 182 : 174;
             if (width <= 0) return;
             double x = wideWidget ? 7 : (ActualWidth - width) / 2;
             double y = preview ? (ActualHeight - width / 2.08) / 2 : celebrating && !wideWidget ? 16 : 6;

@@ -10,30 +10,51 @@ import { readSettings, writeSettings } from './settings.ts';
 import { dimensions, isCompact, widgetHeight, widgetWidth, widthFromDrag } from './size.ts';
 import { Music, useMusic } from './Music.tsx';
 import { Weather } from './Weather.tsx';
+import { useClock } from './useClock.ts';
 import './style.css';
 
 const calendar = loadCalendar(calendarData);
 const years = calendar.map(day => day.year);
 const nativeWindow = isTauri() ? getCurrentWindow() : null;
-if (!nativeWindow) document.documentElement.classList.add('browser-demo');
 
 const currentScale = () => nativeWindow ? Math.min(innerWidth / widgetWidth, innerHeight / widgetHeight) : 1;
 
+function CountdownFace({ automatic, year, compact, visible }: {
+  automatic: boolean; year: number; compact: boolean; visible: boolean;
+}) {
+  const now = useClock(visible);
+  const target = selectTarget(calendar, automatic, year, now);
+  const left = target && countdown(target.timestamp, now);
+  const dayLabel = compact && !target ? 'Hết dữ liệu' : compact && left?.reached ? 'Tết đã đến' : 'Ngày';
+
+  const parts = [['Giờ', left?.hours], ['Phút', left?.minutes], ['Giây', left?.seconds]] as const;
+  const format = (value: number | undefined) => value === undefined ? '–' : String(value).padStart(2, '0');
+
+  return (
+    <div className="face" role="timer" aria-live="off" aria-label="Đếm ngược đến Tết theo giờ Việt Nam">
+      <p className="year">{target ? `${target.name} · ${target.year}` : 'Nghỉ Lễ'}</p>
+      <p className={`days ${left && left.days >= 1000 ? 'wide-number' : ''}`}><span className="numeral" key={left?.days}>{left?.days ?? '–'}</span></p>
+      <span className="unit day-unit">{dayLabel}</span>
+      <span className="face-divider" aria-hidden="true" />
+      <div className="clock">
+        {parts.map(([name, value]) => <div key={name}><span className="numeral" key={value}>{format(value)}</span><span className="unit">{name}</span></div>)}
+      </div>
+      {!compact && <p className="date">{!target ? 'Hết dữ liệu lịch Tết' : left?.reached ? 'Tết này đã đến' : `${target.date} · Giờ Việt Nam`}</p>}
+    </div>
+  );
+}
+
 function App() {
   const [settings, changeSettings] = useState(() => readSettings(localStorage, years, matchMedia('(prefers-reduced-motion: reduce)').matches));
-  const [now, setNow] = useState(Date.now);
   const [panel, setPanel] = useState<'settings' | 'music' | false>(false);
   const [visible, setVisible] = useState(!document.hidden);
-  const music = useMusic(Boolean(nativeWindow), panel === 'music' && visible);
+  const music = useMusic(panel === 'music' && visible);
   const [error, setError] = useState('');
   const [scale, setScale] = useState(currentScale);
   const grip = useRef<{ id: number; x: number; y: number; start: number; width: number } | null>(null);
   const resize = useRef<{ busy: boolean; next?: { width: number; save: boolean } }>({ busy: false });
-  const target = selectTarget(calendar, settings.automatic, settings.year, now);
-  const left = target && countdown(target.timestamp, now);
   const motion = settings.motion && visible;
   const compact = isCompact(scale * widgetWidth);
-  const dayLabel = compact && !target ? 'Hết dữ liệu' : compact && left?.reached ? 'Tết đã đến' : 'Ngày';
 
   useEffect(() => {
     const update = () => setScale(currentScale());
@@ -42,7 +63,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const refresh = () => { setVisible(!document.hidden); setNow(Date.now()); };
+    const refresh = () => setVisible(!document.hidden);
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('focus', refresh);
     return () => {
@@ -50,13 +71,6 @@ function App() {
       window.removeEventListener('focus', refresh);
     };
   }, []);
-
-  useEffect(() => {
-    if (!visible || panel) return;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(timer);
-  }, [visible, panel]);
 
   useEffect(() => {
     if (!writeSettings(localStorage, settings)) setError('Không lưu được cài đặt.');
@@ -74,9 +88,6 @@ function App() {
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
   }, []);
-
-  const parts = [['Giờ', left?.hours], ['Phút', left?.minutes], ['Giây', left?.seconds]] as const;
-  const format = (value: number | undefined) => value === undefined ? '–' : String(value).padStart(2, '0');
 
   async function requestSize(width: number, save: boolean) {
     if (!nativeWindow) return;
@@ -144,16 +155,7 @@ function App() {
       ) : (
         <>
           <Weather motion={motion} />
-          <div className="face" role="timer" aria-live="off" aria-label="Đếm ngược đến Tết theo giờ Việt Nam">
-            <p className="year">{target ? `${target.name} · ${target.year}` : 'Nghỉ Lễ'}</p>
-            <p className={`days ${left && left.days >= 1000 ? 'wide-number' : ''}`}><span className="numeral" key={left?.days}>{left?.days ?? '–'}</span></p>
-            <span className="unit day-unit">{dayLabel}</span>
-            <span className="face-divider" aria-hidden="true" />
-            <div className="clock">
-              {parts.map(([name, value]) => <div key={name}><span className="numeral" key={value}>{format(value)}</span><span className="unit">{name}</span></div>)}
-            </div>
-            {!compact && <p className="date">{!target ? 'Hết dữ liệu lịch Tết' : left?.reached ? 'Tết này đã đến' : `${target.date} · Giờ Việt Nam`}</p>}
-          </div>
+          <CountdownFace automatic={settings.automatic} year={settings.year} compact={compact} visible={visible} />
           <div className="drag" data-tauri-drag-region aria-hidden="true" />
           <div className="controls">
             <button type="button" aria-label="Cài đặt" title="Cài đặt (F2)" onClick={() => setPanel('settings')}>⚙</button>
@@ -188,4 +190,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+if (nativeWindow) createRoot(document.getElementById('root')!).render(<App />);

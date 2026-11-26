@@ -44,9 +44,9 @@ namespace NghiLe
 
         internal static DockPanel SectionHeading(string title, FrameworkElement resources, double topMargin)
         {
-            var heading = new DockPanel { Margin = new Thickness(0, topMargin, 0, 5) };
-            heading.Children.Add(new TextBlock { Text = title, FontSize = 18, FontWeight = FontWeights.SemiBold,
-                Foreground = (Brush)resources.FindResource("PanelGold"), Margin = new Thickness(0, 0, 12, 0) });
+            var heading = new DockPanel { Margin = new Thickness(0, topMargin, 0, 8) };
+            heading.Children.Add(new TextBlock { Text = title, FontSize = 19, FontFamily = Widget.DisplayFont,
+                Foreground = (Brush)resources.FindResource("PanelInk"), Margin = new Thickness(0, 0, 12, 0) });
             heading.Children.Add(new Border { Height = 1, VerticalAlignment = VerticalAlignment.Center,
                 Background = (Brush)resources.FindResource("PanelDivider") });
             return heading;

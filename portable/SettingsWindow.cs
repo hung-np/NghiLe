@@ -60,7 +60,7 @@ namespace NghiLe
 
     internal sealed class SettingsWindow : Window
     {
-        internal const double DefaultWidth = 650;
+        internal const double DefaultWidth = 760;
         internal const double DefaultHeight = 700;
         private const double DateWidth = 50;
         private const double LunarWidth = 65;
@@ -81,10 +81,10 @@ namespace NghiLe
         private readonly Brush muted;
         private readonly ToggleButton springSwitch;
 
-        internal SettingsWindow(Window owner, Settings settings, Action saveSelection, Action scheduleSave,
+        internal SettingsWindow(Window owner, Settings settings, ResourceDictionary theme, Action saveSelection, Action scheduleSave,
             Func<FrameworkElement> createOptions, Func<FrameworkElement> createPet, Func<ResourceDictionary, FrameworkElement> createMusic,
             Action<bool> setSpringStyle, Func<PersonalDate[], bool> savePersonalDates,
-            Func<string, int, bool> saveReminder)
+            Func<string, int, bool> saveReminder, Func<string, bool, bool> savePin)
         {
             this.settings = settings;
             this.persist = saveSelection;
@@ -95,7 +95,6 @@ namespace NghiLe
             ResizeMode = ResizeMode.CanResize;
             UseLayoutRounding = true;
             FontFamily = new FontFamily("Segoe UI");
-            var theme = PanelPage.LoadTheme();
             Resources.MergedDictionaries.Add(theme);
             Background = (Brush)FindResource("PanelCanvas");
             gold = (Brush)FindResource("PanelGold");
@@ -137,7 +136,7 @@ namespace NghiLe
 
             var shell = new DockPanel();
             var titleBar = CreateTitleBar();
-            titleBar.Margin = new Thickness(20, 12, 14, 6);
+            titleBar.Margin = new Thickness(20, 12, 20, 12);
             DockPanel.SetDock(titleBar, Dock.Top);
             shell.Children.Add(titleBar);
             Content = new Border { Child = shell, BorderBrush = (Brush)FindResource("PanelLine"),
@@ -158,18 +157,21 @@ namespace NghiLe
             UpdateSelectedCount();
 
             var footerFrame = new Border { Child = footer, BorderBrush = (Brush)FindResource("PanelDivider"),
-                BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(20, 8, 20, 8) };
+                BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(20, 10, 20, 10) };
             DockPanel.SetDock(footerFrame, Dock.Bottom);
             shell.Children.Add(footerFrame);
 
             occurrenceStatus = Label("", 11, gold);
             occurrenceStatus.Name = "OccurrenceStatus";
             occurrenceStatus.FontWeight = FontWeights.SemiBold;
-            occurrenceName = Label("", 27, ink, Widget.DisplayFont);
-            occurrenceName.Margin = new Thickness(0, 4, 0, 0);
-            occurrenceDate = Label("", 30, ink, Widget.CounterFont);
+            occurrenceName = Label("", 31, ink, Widget.DisplayFont);
+            occurrenceName.Margin = new Thickness(0, 6, 0, 0);
+            var stampInk = (Brush)FindResource("PanelOnGold");
+            occurrenceDate = Label("", 27, stampInk, Widget.DisplayFont);
+            occurrenceDate.TextWrapping = TextWrapping.NoWrap;
             occurrenceDate.Name = "OccurrenceDate";
-            occurrenceYear = Label("", 12, gold, Widget.CounterFont);
+            Typography.SetNumeralAlignment(occurrenceDate, FontNumeralAlignment.Tabular);
+            occurrenceYear = Label("", 12, stampInk, Widget.CounterFont);
             occurrenceStamp = CreateDateStamp();
 
             var body = new StackPanel();
@@ -198,7 +200,7 @@ namespace NghiLe
                 {
                     if (upcomingPage == null)
                     {
-                        upcomingPage = new UpcomingPage(settings, theme, saveReminder, () => Open(false));
+                        upcomingPage = new UpcomingPage(settings, theme, saveReminder, savePin, () => Open(false));
                         upcomingTab.Content = PanelPage.Scroll(upcomingPage);
                     }
                     upcomingPage.Refresh(DateTimeOffset.UtcNow.ToOffset(HolidayCountdown.VietnamOffset));
@@ -269,12 +271,11 @@ namespace NghiLe
             DockPanel.SetDock(close, Dock.Right);
             bar.Children.Add(close);
             var caption = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            caption.Children.Add(new Border { Width = 3, Height = 18, Background = gold, CornerRadius = new CornerRadius(1.5),
-                Margin = new Thickness(0, 0, 9, 0) });
-            var product = Label(Widget.ProductName, 16, ink);
-            product.FontWeight = FontWeights.SemiBold;
+            caption.Children.Add(new Border { Width = 7, Height = 7, Background = gold, VerticalAlignment = VerticalAlignment.Center,
+                LayoutTransform = new RotateTransform(45), Margin = new Thickness(1, 0, 12, 0) });
+            var product = Label(Widget.ProductName, 23, ink, Widget.DisplayFont);
             caption.Children.Add(product);
-            var view = Label("Cài đặt", 13, muted);
+            var view = Label("Cài đặt", 12, muted);
             view.Margin = new Thickness(12, 0, 0, 0);
             view.VerticalAlignment = VerticalAlignment.Center;
             caption.Children.Add(view);
@@ -293,9 +294,9 @@ namespace NghiLe
             DockPanel.SetDock(occurrenceStamp, Dock.Right);
             body.Children.Add(occurrenceStamp);
             body.Children.Add(heading);
-            return new Border { Child = body, MinHeight = 96, Padding = new Thickness(16, 9, 10, 9),
-                Background = (Brush)FindResource("PanelField"), BorderBrush = gold,
-                BorderThickness = new Thickness(3, 0, 0, 0), CornerRadius = new CornerRadius(10) };
+            return new Border { Child = body, MinHeight = 117, Padding = new Thickness(19, 12, 12, 12),
+                Background = (Brush)FindResource("PanelCalendar"), BorderBrush = (Brush)FindResource("PanelLine"),
+                BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12) };
         }
 
         private Border CreateDateStamp()
@@ -305,11 +306,14 @@ namespace NghiLe
             occurrenceYear.TextAlignment = TextAlignment.Center;
             occurrenceDate.FontWeight = FontWeights.SemiBold;
             date.Children.Add(occurrenceDate);
-            date.Children.Add(new System.Windows.Shapes.Rectangle { Width = 59, Height = 1,
-                Stroke = gold, StrokeDashArray = new DoubleCollection { 1, 3 }, Margin = new Thickness(0, 2, 0, 3) });
+            date.Children.Add(new Border { Width = 48, Height = 1, Background = (Brush)FindResource("PanelOnGold"),
+                Opacity = .35, Margin = new Thickness(0, 4, 0, 4) });
             date.Children.Add(occurrenceYear);
-            return new Border { Child = date, Width = 106, MinHeight = 74, Margin = new Thickness(14, 0, 0, 0),
-                BorderBrush = (Brush)FindResource("PanelLine"), BorderThickness = new Thickness(1, 0, 0, 0) };
+            var inlay = new Border { Child = date, CornerRadius = new CornerRadius(6), Margin = new Thickness(4),
+                BorderBrush = (Brush)FindResource("PanelLine"), BorderThickness = new Thickness(1), Padding = new Thickness(3) };
+            return new Border { Child = inlay, Width = 120, MinHeight = 90, Margin = new Thickness(14, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center, CornerRadius = new CornerRadius(10),
+                Background = (Brush)FindResource("PanelDatePaper") };
         }
 
         internal void ShowOccurrence(string name, DateTimeOffset? date, bool active, string unavailable)
@@ -338,7 +342,11 @@ namespace NghiLe
 
         private void AddGroup(StackPanel body, string title, HolidaySetting[] items)
         {
-            body.Children.Add(PanelPage.SectionHeading(title, this, 10));
+            body.Children.Add(PanelPage.SectionHeading(title, this, 14));
+            var rows = new StackPanel();
+            body.Children.Add(new Border { Child = rows, CornerRadius = new CornerRadius(9), Padding = new Thickness(4, 1, 4, 0),
+                BorderBrush = (Brush)FindResource("PanelDivider"), BorderThickness = new Thickness(1),
+                Background = (Brush)FindResource("PanelField") });
             var style = (Style)FindResource("HolidayRow");
             foreach (var item in items)
             {
@@ -361,9 +369,9 @@ namespace NghiLe
                     var row = new Grid();
                     row.Children.Add(input);
                     row.Children.Add(springSwitch);
-                    body.Children.Add(row);
+                    rows.Children.Add(row);
                 }
-                else body.Children.Add(input);
+                else rows.Children.Add(input);
             }
         }
 
@@ -378,7 +386,7 @@ namespace NghiLe
             name.VerticalAlignment = VerticalAlignment.Center;
             name.Margin = new Thickness(0, 0, item.Theme == HolidayTheme.LunarNewYear ? springSwitch.Width + 24 : 10, 0);
             content.Children.Add(name);
-            var date = Label(string.Format("{0:00}/{1:00}", item.Day, item.Month), 14, muted);
+            var date = Label(string.Format("{0:00}/{1:00}", item.Day, item.Month), 14, muted, Widget.CounterFont);
             Typography.SetNumeralAlignment(date, FontNumeralAlignment.Tabular);
             date.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(date, 1);

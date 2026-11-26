@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Windows;
 using System.Windows.Threading;
 
 namespace NghiLe
@@ -46,14 +47,67 @@ namespace NghiLe
                     if (!SelectAndPlay(playlist, second)) return 46;
                     WaitFor(frame);
                     Console.Error.WriteLine("Opened: " + string.Join(", ", played.Select(Path.GetFileName)));
-                    return played.SequenceEqual(new[] { second, added, first, second }) ? 0 : 43;
+                    if (!played.SequenceEqual(new[] { second, added, first, second })) return 43;
                 }
+                return CheckFolderChanges(folder);
             }
             finally
             {
                 foreach (var path in new[] { first, second, added, ignored }) File.Delete(path);
                 Directory.Delete(folder);
             }
+        }
+
+        private static int CheckFolderChanges(string root)
+        {
+            var folder = Path.Combine(root, "watch");
+            var moved = Path.Combine(root, "moved");
+            var track = Path.Combine(folder, "new.wav");
+            var renamed = Path.Combine(folder, "renamed.wav");
+            using (var playlist = new Playlist(folder))
+            using (var view = new MusicView(playlist, PanelPage.LoadTheme()))
+            {
+                var window = new Window { Content = view, Width = 220, Height = 180, ShowInTaskbar = false, ShowActivated = false };
+                window.Show();
+                try
+                {
+                    Directory.CreateDirectory(folder);
+                    WriteWave(track);
+                    if (!WaitForTracks(playlist, track)) return 140;
+                    File.Move(track, renamed);
+                    if (!WaitForTracks(playlist, renamed)) return 141;
+                    Directory.Move(folder, moved);
+                    if (!WaitForTracks(playlist)) return 142;
+                    Directory.CreateDirectory(folder);
+                    WriteWave(track);
+                    if (!WaitForTracks(playlist, track)) return 143;
+                    File.Delete(track);
+                    return WaitForTracks(playlist) ? 0 : 144;
+                }
+                finally
+                {
+                    window.Close();
+                    view.Dispose();
+                    foreach (var directory in new[] { folder, moved })
+                    {
+                        if (!Directory.Exists(directory)) continue;
+                        File.Delete(Path.Combine(directory, "new.wav"));
+                        File.Delete(Path.Combine(directory, "renamed.wav"));
+                        Directory.Delete(directory);
+                    }
+                }
+            }
+        }
+
+        private static bool WaitForTracks(Playlist playlist, params string[] paths)
+        {
+            if (playlist.Tracks.SequenceEqual(paths)) return true;
+            var frame = new DispatcherFrame();
+            Action onChanged = () => { if (playlist.Tracks.SequenceEqual(paths)) frame.Continue = false; };
+            playlist.Changed += onChanged;
+            try { WaitFor(frame); }
+            finally { playlist.Changed -= onChanged; }
+            return playlist.Tracks.SequenceEqual(paths);
         }
 
         internal static int VerifyFolder(string folder)
