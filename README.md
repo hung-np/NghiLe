@@ -2,6 +2,31 @@
 
 Nghỉ Lễ là widget nổi cho Windows. Bản portable v2 có giao diện riêng cho chín dịp ở cả hai bố cục đồng hồ, **Dọc** (200 × 250 px) và **Ngang** (360 × 84 px). Đồng hồ và hiệu ứng chạy offline. Hiệu ứng trên đồng hồ chạy tối đa 12 khung hình mỗi giây và dừng khi đồng hồ được ẩn.
 
+## Tạo `NghiLe.exe` từ mã nguồn trên Windows
+
+Bản portable WPF cần Windows PowerShell và trình biên dịch `csc.exe` của .NET Framework 4.x. Nếu lấy mã nguồn bằng lệnh bên dưới, máy cần có Git.
+
+1. Mở **Windows PowerShell** tại thư mục bạn muốn lưu dự án, rồi chạy hai lệnh sau.
+
+   ```powershell
+   git clone https://github.com/hung-np/NghiLe.git
+   cd NghiLe
+   ```
+
+   Bạn cũng có thể chọn **Code → Download ZIP** trên GitHub, giải nén và mở PowerShell tại thư mục chứa `README.md` và `portable`.
+
+2. Nếu Nghỉ Lễ đang chạy, chọn **Thoát Nghỉ Lễ** từ biểu tượng ở khay hệ thống. Chạy lệnh sau từ thư mục dự án.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\portable\Build.ps1
+   ```
+
+3. Khi build xong, tệp `NghiLe.exe` nằm cùng thư mục với `README.md`. Bấm đúp vào tệp để mở widget hoặc chạy lệnh dưới đây.
+
+   ```powershell
+   .\NghiLe.exe
+   ```
+
 ## Mở trên Windows
 
 1. Bấm đúp `NghiLe.exe` trong thư mục này. Bản portable dùng WPF và .NET Framework có sẵn trên máy kiểm tra. Bạn có thể chạy từ Downloads.
@@ -110,7 +135,7 @@ Chỉnh giao diện React trong `src/style.css`, cành đào và hạt mưa tron
 
 Điểm vào và widget ở `portable/NghiLe.cs`. Hai bản dùng chung bảng ngày Tết và bản vẽ cành đào trong `data/`. Chỉnh cách vẽ và chuyển động của WPF trong `portable/PeachScene.cs`.
 
-Chạy `.\portable\Build.ps1` từ thư mục dự án để tạo `NghiLe.exe` bằng trình biên dịch .NET Framework có sẵn trên máy. Tham số `-OutputPath` cho phép chọn đường dẫn khác. Bước build dựng sẵn và nhúng các khung 3D vào tệp thực thi. Khi chạy, widget giải nén các khung của cảnh đang hiển thị.
+Xem [các bước tạo `NghiLe.exe`](#tạo-nghileexe-từ-mã-nguồn-trên-windows) để build bản portable. Tham số `-OutputPath` của `Build.ps1` cho phép chọn đường dẫn khác. Bước build dựng sẵn và nhúng các khung 3D vào tệp thực thi. Khi chạy, widget giải nén các khung của cảnh đang hiển thị.
 
 ## Trạng thái kiểm tra
 
