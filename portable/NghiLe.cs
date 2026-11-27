@@ -60,6 +60,7 @@ namespace NghiLe
         public double SettingsWidth { get; set; }
         public double SettingsHeight { get; set; }
         public WidgetProfile[] AdditionalWidgets { get; set; }
+        public TimerSession TimerSession { get; set; }
 
         public Settings()
         {
@@ -122,7 +123,11 @@ namespace NghiLe
 
         internal static double FromDrag(double scale, double dx, double dy, bool horizontal = false)
         {
-            var size = Clock(horizontal);
+            return FromDrag(scale, dx, dy, Clock(horizontal));
+        }
+
+        private static double FromDrag(double scale, double dx, double dy, Size size)
+        {
             return LimitScale(scale + (dx * size.Width + dy * size.Height) /
                 (size.Width * size.Width + size.Height * size.Height));
         }
@@ -143,10 +148,14 @@ namespace NghiLe
 
         internal static double ResizeScale(double scale, Vector delta, WidgetEdge edge, bool horizontal)
         {
+            return ResizeScale(scale, delta, edge, Clock(horizontal));
+        }
+
+        internal static double ResizeScale(double scale, Vector delta, WidgetEdge edge, Size size)
+        {
             int x = Direction(edge, WidgetEdge.Left, WidgetEdge.Right);
             int y = Direction(edge, WidgetEdge.Top, WidgetEdge.Bottom);
-            if (x != 0 && y != 0) return FromDrag(scale, x * delta.X, y * delta.Y, horizontal);
-            var size = Clock(horizontal);
+            if (x != 0 && y != 0) return FromDrag(scale, x * delta.X, y * delta.Y, size);
             return LimitScale(scale + x * delta.X / size.Width + y * delta.Y / size.Height);
         }
 
@@ -156,6 +165,22 @@ namespace NghiLe
             double y = (1 - Direction(edge, WidgetEdge.Top, WidgetEdge.Bottom)) / 2.0;
             return new Point(start.X + (start.Width - target.Width) * x,
                 start.Y + (start.Height - target.Height) * y);
+        }
+
+        internal static Cursor ResizeCursor(WidgetEdge edge)
+        {
+            switch (edge)
+            {
+                case WidgetEdge.Left:
+                case WidgetEdge.Right: return Cursors.SizeWE;
+                case WidgetEdge.Top:
+                case WidgetEdge.Bottom: return Cursors.SizeNS;
+                case WidgetEdge.Left | WidgetEdge.Top:
+                case WidgetEdge.Right | WidgetEdge.Bottom: return Cursors.SizeNWSE;
+                case WidgetEdge.Right | WidgetEdge.Top:
+                case WidgetEdge.Left | WidgetEdge.Bottom: return Cursors.SizeNESW;
+                default: return null;
+            }
         }
 
         private static int Direction(WidgetEdge edge, WidgetEdge first, WidgetEdge last)
@@ -241,6 +266,7 @@ namespace NghiLe
             s.DimFromHour = WidgetPower.ValidHour(s.DimFromHour, WidgetPower.DefaultDimFrom);
             s.DimUntilHour = WidgetPower.ValidHour(s.DimUntilHour, WidgetPower.DefaultDimUntil);
             s.AdditionalWidgets = WidgetProfile.Normalize(s.AdditionalWidgets);
+            TimerSession.Normalize(s.TimerSession);
             return s;
         }
 
@@ -412,6 +438,7 @@ namespace NghiLe
                 showPetItem.Enabled = config.PetEnabled;
                 showBothItem.Enabled = config.PetEnabled;
                 trayMenu.MenuItems.Add("Dịp sắp tới", (s, e) => OpenUpcoming());
+                trayMenu.MenuItems.Add("Hẹn giờ", (s, e) => OpenTimerSettings());
                 trayMenu.MenuItems.Add("Cài đặt", (s, e) => { if (!IsVisible) ShowWidget(); OpenSettings(); });
                 trayMenu.MenuItems.Add("Thoát " + ProductName, (s, e) => Quit());
                 tray.ContextMenu = trayMenu;
@@ -508,6 +535,7 @@ namespace NghiLe
                 UpdateReminderTimer();
                 ResetPetDelay();
                 Dispatcher.BeginInvoke(new Action(RestoreCompanions), DispatcherPriority.Loaded);
+                Dispatcher.BeginInvoke(new Action(RestoreTimerSession), DispatcherPriority.Loaded);
             };
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
             Microsoft.Win32.SystemEvents.TimeChanged += OnTimeChanged;
@@ -552,6 +580,7 @@ namespace NghiLe
                 if (playlist != null) playlist.Dispose();
                 if (!IsCompanion)
                 {
+                    if (countdownTimer != null) countdownTimer.Dispose();
                     CloseCompanions();
                     tray.Dispose(); trayMenu.Dispose(); icon.Dispose();
                     System.Windows.Application.Current.Shutdown();
@@ -615,7 +644,11 @@ namespace NghiLe
 
         private void OnDisplaySettingsChanged(object sender, EventArgs args)
         {
-            Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) PlaceOnScreen(); }));
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (IsVisible) PlaceOnScreen();
+                if (timerWindow != null && timerWindow.IsVisible) timerWindow.KeepInWorkArea();
+            }));
         }
 
         private void OnTimeChanged(object sender, EventArgs args)
@@ -670,6 +703,7 @@ namespace NghiLe
             if (IsCompanion) return PersistCompanion();
             if (changingCompanionVisibility) return true;
             CollectCompanionPlacement();
+            CollectTimerSession();
             if (ready)
             {
                 var size = WidgetSize.Clock(config.Horizontal);
@@ -821,6 +855,7 @@ namespace NghiLe
             }
             ApplyGlass();
             ApplyPinPalette();
+            ApplyTimerPalette();
             holidayScene.ShowTheme(theme, config.ApricotNewYear, config.Use3D);
             UpdateMotion();
         }
@@ -1526,19 +1561,7 @@ namespace NghiLe
 
         private void SetResizeCursor(WidgetEdge edge)
         {
-            Cursor next;
-            switch (edge)
-            {
-                case WidgetEdge.Left:
-                case WidgetEdge.Right: next = Cursors.SizeWE; break;
-                case WidgetEdge.Top:
-                case WidgetEdge.Bottom: next = Cursors.SizeNS; break;
-                case WidgetEdge.Left | WidgetEdge.Top:
-                case WidgetEdge.Right | WidgetEdge.Bottom: next = Cursors.SizeNWSE; break;
-                case WidgetEdge.Right | WidgetEdge.Top:
-                case WidgetEdge.Left | WidgetEdge.Bottom: next = Cursors.SizeNESW; break;
-                default: next = null; break;
-            }
+            var next = WidgetSize.ResizeCursor(edge);
             if (Cursor != next) Cursor = next;
         }
 
@@ -1631,7 +1654,7 @@ namespace NghiLe
             OpenSettings(true);
         }
 
-        private void OpenSettings(bool upcoming)
+        private void OpenSettings(bool upcoming, bool timer = false)
         {
             if (IsCompanion) { OpenCompanionSettings(); return; }
             petDelay.Stop();
@@ -1645,7 +1668,7 @@ namespace NghiLe
                         PrunePins();
                         UpdateClock();
                         Persist();
-                    }, ScheduleSave, BuildSettings, BuildPetSettings, CreateMusic, SetSpringStyle, SavePersonalDates, SaveReminder, SavePin);
+                    }, ScheduleSave, BuildSettings, BuildPetSettings, CreateMusic, BuildTimerPage, SetSpringStyle, SavePersonalDates, SaveReminder, SavePin);
                 settingsWindow.Closed += (s, e) =>
                 {
                     if (music != null) music.Dispose();
@@ -1658,7 +1681,7 @@ namespace NghiLe
                 };
             }
             settingsWindow.ShowOccurrence(displayedName, displayedTarget, displayedSeconds == 0, unavailableStatus);
-            settingsWindow.Open(upcoming);
+            settingsWindow.Open(upcoming, timer);
         }
 
         private bool SavePersonalDates(PersonalDate[] dates)
@@ -2620,6 +2643,7 @@ namespace NghiLe
 
         private static int SelfTest()
         {
+            if (!CountdownTimer.Check()) return 167;
             if (!CheckWidgetProfiles()) return 166;
             if (!CheckPowerOptions()) return 163;
             if (!CheckSettingsBackup()) return 164;

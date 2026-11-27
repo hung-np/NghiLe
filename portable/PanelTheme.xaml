@@ -35,7 +35,7 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-              <Setter TargetName="InputFrame" Property="BorderBrush" Value="{StaticResource PanelGold}" />
+              <Setter TargetName="InputFrame" Property="BorderBrush" Value="{DynamicResource PanelGold}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False"><Setter TargetName="InputFrame" Property="Opacity" Value=".55" /></Trigger>
           </ControlTemplate.Triggers>
@@ -68,7 +68,7 @@
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Hover" Property="Opacity" Value=".1" /></Trigger>
             <Trigger Property="IsPressed" Value="True"><Setter TargetName="Hover" Property="Opacity" Value=".2" /></Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonFrame" Property="BorderBrush" Value="{StaticResource PanelGold}" /></Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonFrame" Property="BorderBrush" Value="{DynamicResource PanelGold}" /></Trigger>
             <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ButtonFrame" Property="Opacity" Value=".52" /></Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -80,6 +80,40 @@
     <Setter Property="Background" Value="{StaticResource PanelGold}" />
     <Setter Property="Foreground" Value="{StaticResource PanelOnGold}" />
     <Setter Property="MinHeight" Value="28" />
+  </Style>
+
+  <Style x:Key="TimerRoundAction" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type Button}">
+          <Grid>
+            <Ellipse x:Name="Frame" Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" />
+            <Ellipse x:Name="Hover" Fill="White" Opacity="0" />
+            <Ellipse x:Name="Focus" Margin="3" Stroke="{TemplateBinding Foreground}" StrokeThickness="1" Visibility="Hidden" />
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Hover" Property="Opacity" Value=".12" /></Trigger>
+            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Hover" Property="Opacity" Value=".22" /></Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Focus" Property="Visibility" Value="Visible" /></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value=".50" /></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="TimerCompactProgressBar" TargetType="{x:Type ProgressBar}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type ProgressBar}">
+          <Grid x:Name="PART_Track" Background="{TemplateBinding Background}">
+            <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" />
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
   </Style>
 
   <Style TargetType="{x:Type CheckBox}">
@@ -166,7 +200,7 @@
         <ControlTemplate TargetType="{x:Type TabItem}">
           <Grid Height="39" Background="Transparent">
             <Border x:Name="TabFocus" Margin="1,0" BorderThickness="1" BorderBrush="Transparent" CornerRadius="5" />
-            <ContentPresenter ContentSource="Header" Margin="4,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Viewbox Margin="3,0" StretchDirection="DownOnly" VerticalAlignment="Center"><ContentPresenter ContentSource="Header" /></Viewbox>
             <Border x:Name="CurrentTab" Height="2" Margin="14,0,14,3" VerticalAlignment="Bottom" CornerRadius="1"
                     Background="{StaticResource PanelGold}" Visibility="Hidden" />
           </Grid>

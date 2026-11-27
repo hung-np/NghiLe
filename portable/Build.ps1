@@ -23,7 +23,7 @@ $sources = 'NghiLe.cs', 'CountdownUnits.cs', 'HolidayCountdown.cs', 'HolidayScen
     'PersonalDate.cs', 'PersonalDateArtwork.cs', 'PersonalDatesPage.cs', 'PanelPage.cs', 'SettingsWindow.cs',
     'OccasionReminders.cs', 'PinnedOccasions.cs', 'UpcomingPage.cs', 'MonthCalendarView.cs', 'VietnameseCalendar.cs',
     'PetArtwork.cs', 'TaskbarPet.cs',
-    'Music.cs', 'MusicChecks.cs', 'StartupShortcut.cs', 'WidgetPower.cs', 'SettingsBackup.cs', 'CompanionWidgets.cs' | ForEach-Object { Join-Path $PSScriptRoot $_ }
+    'Music.cs', 'MusicChecks.cs', 'CountdownTimer.cs', 'StartupShortcut.cs', 'WidgetPower.cs', 'SettingsBackup.cs', 'CompanionWidgets.cs' | ForEach-Object { Join-Path $PSScriptRoot $_ }
 $lunarMonths = Join-Path $root 'data/lunar-months.csv'
 $resources = "/resource:$lunarMonths,NghiLe.LunarMonths", "/resource:$data,NghiLe.Calendar", "/resource:$hungKings,NghiLe.HungKings", "/resource:$midAutumn,NghiLe.MidAutumn",
     "/resource:$artwork,NghiLe.Peach", "/resource:$birthday,NghiLe.Birthday", "/resource:$hacLongWalk,NghiLe.HacLongWalk",

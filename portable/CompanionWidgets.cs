@@ -192,6 +192,7 @@ namespace NghiLe
 
         private void HideAllWidgets()
         {
+            if (timerWindow != null) timerWindow.Hide();
             ChangeCompanionVisibility(() =>
             {
                 foreach (var window in companions.Values.ToArray())

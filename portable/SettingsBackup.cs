@@ -22,6 +22,7 @@ namespace NghiLe
             var data = current.Copy();
             data.Version = SettingsFile.SettingsVersion;
             data.X = data.Y = null;
+            data.TimerSession = null;
             data.SettingsWidth = SettingsWindow.DefaultWidth;
             data.SettingsHeight = SettingsWindow.DefaultHeight;
             data.DeliveredReminders = new string[0];
@@ -108,6 +109,7 @@ namespace NghiLe
             next.SettingsWidth = local.SettingsWidth;
             next.SettingsHeight = local.SettingsHeight;
             next.DeliveredReminders = local.DeliveredReminders;
+            next.TimerSession = local.TimerSession;
             next.AdditionalWidgets = (backup.AdditionalWidgets ?? local.AdditionalWidgets).Select(item =>
             {
                 var copy = item.Copy();
@@ -208,6 +210,7 @@ namespace NghiLe
         {
             if (resizing) EndEdgeResize();
             CollectCompanionPlacement();
+            CollectTimerSession();
             var next = SettingsBackup.ForThisDevice(backup, config);
             if (ready) { next.X = Left; next.Y = Top; }
             if (!file.Save(next)) return false;

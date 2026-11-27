@@ -67,6 +67,7 @@ namespace NghiLe
         private const double RowPadding = 12;
         private readonly TabItem holidaysTab;
         private readonly TabItem upcomingTab;
+        private readonly TabItem timerTab;
         private UpcomingPage upcomingPage;
         private readonly TextBlock selectedCount;
         private readonly TextBlock occurrenceStatus;
@@ -83,6 +84,7 @@ namespace NghiLe
 
         internal SettingsWindow(Window owner, Settings settings, ResourceDictionary theme, Action saveSelection, Action scheduleSave,
             Func<FrameworkElement> createOptions, Func<FrameworkElement> createPet, Func<ResourceDictionary, FrameworkElement> createMusic,
+            Func<FrameworkElement> createTimer,
             Action<bool> setSpringStyle, Func<PersonalDate[], bool> savePersonalDates,
             Func<string, int, bool> saveReminder, Func<string, bool, bool> savePin)
         {
@@ -193,6 +195,8 @@ namespace NghiLe
             tabs.Items.Add(optionsTab);
             tabs.Items.Add(petTab);
             tabs.Items.Add(musicTab);
+            timerTab = new TabItem { Name = "TimerTab", Header = "Hẹn giờ", Style = tabStyle };
+            tabs.Items.Add(timerTab);
             tabs.SelectionChanged += (s, e) =>
             {
                 if (e.Source != tabs) return;
@@ -210,6 +214,7 @@ namespace NghiLe
                 if (optionsTab.IsSelected && optionsTab.Content == null) optionsTab.Content = createOptions();
                 if (petTab.IsSelected && petTab.Content == null) petTab.Content = createPet();
                 if (musicTab.IsSelected && musicTab.Content == null) musicTab.Content = createMusic(theme);
+                if (timerTab.IsSelected && timerTab.Content == null) timerTab.Content = createTimer();
                 selectedCount.Visibility = holidaysTab.IsSelected ? Visibility.Visible : Visibility.Collapsed;
             };
             tabs.SelectedItem = holidaysTab;
@@ -237,10 +242,10 @@ namespace NghiLe
             return Math.Max(min, Math.Min(max, double.IsNaN(value) || value <= 0 ? fallback : value));
         }
 
-        internal void Open(bool upcoming)
+        internal void Open(bool upcoming, bool timer = false)
         {
             springSwitch.IsChecked = settings.ApricotNewYear;
-            var tab = upcoming ? upcomingTab : holidaysTab;
+            var tab = timer ? timerTab : upcoming ? upcomingTab : holidaysTab;
             tab.IsSelected = true;
             if (!IsVisible)
             {
